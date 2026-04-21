@@ -1,0 +1,38 @@
+{
+  "default_geo": "Г",
+  "geos": {
+    "Г": {
+      "label": "Гана",
+      "funnel_id": "ghana_main",
+      "color": "#D4A017"
+    },
+    "Р": {
+      "label": "Регистрация",
+      "funnel_id": "reg_main",
+      "color": "#4CAF50"
+    },
+    "Д": {
+      "label": "РД",
+      "funnel_id": "rd_main",
+      "color": "#2196F3"
+    },
+    "Ф": {
+      "label": "ФД",
+      "funnel_id": "fd_main",
+      "color": "#FF9800"
+    },
+    "Н": {
+      "label": "Нигерия",
+      "funnel_id": "nigeria_main",
+      "color": "#9C27B0"
+    },
+    "Регистрация": {
+      "label": "Регистрация",
+      "color": "#4CAF50"
+    },
+    "РД": {
+      "label": "РД",
+      "color": "#2196F3"
+    }
+  }
+}
