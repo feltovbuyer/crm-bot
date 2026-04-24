@@ -126,7 +126,7 @@ async def handle_any_message(message: types.Message):
 
     if not res:
         args = extract_start_arg(text)
-        geo = get_geo_data(args)
+        geo = get_geo_data("")
 
         db_query_local(
             """
