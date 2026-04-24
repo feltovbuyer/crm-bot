@@ -1,45 +1,194 @@
-import aiohttp
-import ssl
+# keitaro_tracker.py
 
-# Константы из твоих скриншотов
-KEITARO_DOMAIN = "adeolafinancehelp.click"
-CAMPAIGN_TOKEN = "vktwQsNW"
-PIXEL_ID = "1465787968474694"
+import time
+from datetime import datetime
+from aiohttp import web
 
 
-async def send_keitaro_postback(uid, channel="Г1"):
+POSTBACK_TOKEN = "372f7e5"
+
+REG_STATUSES = {"reg", "registration", "register"}
+DEP_STATUSES = {"sale", "deposit", "dep", "ftd"}
+
+
+def ensure_keitaro_columns(db_query):
     """
-    Легкий метод отправки лида без использования браузера.
+    Добавляет нужные поля в users, если их ещё нет.
+    Ошибки игнорируем, потому что SQLite ругнётся, если колонка уже существует.
     """
-    # Формируем URL точно по твоим настройкам Tracking
-    url = (
-        f"https://{KEITARO_DOMAIN}/{CAMPAIGN_TOKEN}?"
-        f"status=lead&"
-        f"external_id={uid}&"
-        f"pixel={PIXEL_ID}&"
-        f"_is_lead=1&"
-        f"sub_id_1={channel}"
-    )
-
-    # Имитируем реальный браузер через заголовки
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Connection": "keep-alive"
-    }
-
-    # Игнорируем возможные проблемы с SSL сертификатами Cloudflare
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
+    try:
+        db_query("ALTER TABLE users ADD COLUMN subid TEXT")
+    except:
+        pass
 
     try:
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(url, timeout=10, ssl=ssl_context) as response:
-                if response.status == 200:
-                    print(f"--> [Keitaro OK] Лид отправлен для ID: {uid}")
-                else:
-                    print(f"--> [Keitaro Error] Код: {response.status}")
-    except Exception as e:
-        print(f"--> [Keitaro Connection Error]: {e}")
+        db_query("ALTER TABLE users ADD COLUMN keitaro_reg INTEGER DEFAULT 0")
+    except:
+        pass
+
+    try:
+        db_query("ALTER TABLE users ADD COLUMN keitaro_deposit INTEGER DEFAULT 0")
+    except:
+        pass
+
+    try:
+        db_query("ALTER TABLE users ADD COLUMN keitaro_payout TEXT DEFAULT ''")
+    except:
+        pass
+
+
+def add_crm_system_message(db_query, user_id, text):
+    """
+    Добавляет системное сообщение в центральный чат лида.
+    sender='user', чтобы сообщение было видно как входящее событие.
+    """
+    db_query(
+        """
+        INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            "user",
+            text,
+            0,
+            datetime.now().strftime("%H:%M"),
+            None,
+            None
+        )
+    )
+
+    db_query(
+        "UPDATE users SET last_ts=? WHERE user_id=?",
+        (time.time(), user_id)
+    )
+
+
+async def keitaro_postback(request):
+    db_query = request.app["db_query"]
+
+    subid = request.query.get("subid")
+    status = (request.query.get("status") or "").lower().strip()
+    payout = request.query.get("payout")
+    tid = request.query.get("tid")
+
+    if not subid:
+        return web.json_response({
+            "ok": False,
+            "error": "no_subid",
+            "message": "Нет subid. Связка должна идти через subid."
+        })
+
+    lead = db_query(
+        """
+        SELECT user_id, full_name, channel
+        FROM users
+        WHERE subid=?
+        """,
+        (subid,),
+        fetch=True
+    )
+
+    if not lead:
+        return web.json_response({
+            "ok": False,
+            "error": "lead_not_found",
+            "subid": subid,
+            "status": status,
+            "payout": payout,
+            "tid": tid
+        })
+
+    user_id, full_name, channel = lead[0]
+    name = full_name or str(user_id)
+
+    if status in REG_STATUSES:
+        db_query(
+            """
+            UPDATE users
+            SET keitaro_reg=1, last_ts=?
+            WHERE user_id=?
+            """,
+            (time.time(), user_id)
+        )
+
+        add_crm_system_message(
+            db_query,
+            user_id,
+            (
+                "✅ KEITARO: РЕГИСТРАЦИЯ\n\n"
+                f"Лид: {name}\n"
+                f"TG ID: {user_id}\n"
+                f"Канал: {channel or '-'}\n"
+                f"SubID: {subid}\n"
+                f"TID: {tid or '-'}"
+            )
+        )
+
+        return web.json_response({
+            "ok": True,
+            "event": "registration",
+            "user_id": user_id,
+            "subid": subid
+        })
+
+    if status in DEP_STATUSES:
+        db_query(
+            """
+            UPDATE users
+            SET keitaro_deposit=1, keitaro_payout=?, last_ts=?
+            WHERE user_id=?
+            """,
+            (payout or "", time.time(), user_id)
+        )
+
+        add_crm_system_message(
+            db_query,
+            user_id,
+            (
+                "💰 KEITARO: ДЕПОЗИТ\n\n"
+                f"Лид: {name}\n"
+                f"TG ID: {user_id}\n"
+                f"Канал: {channel or '-'}\n"
+                f"Сумма: {payout or '-'}\n"
+                f"SubID: {subid}\n"
+                f"TID: {tid or '-'}"
+            )
+        )
+
+        return web.json_response({
+            "ok": True,
+            "event": "deposit",
+            "user_id": user_id,
+            "subid": subid,
+            "payout": payout
+        })
+
+    return web.json_response({
+        "ok": False,
+        "error": "unknown_status",
+        "status": status,
+        "subid": subid,
+        "payout": payout,
+        "tid": tid
+    })
+
+
+async def start_keitaro_server(db_query, host="0.0.0.0", port=80):
+    ensure_keitaro_columns(db_query)
+
+    app = web.Application()
+    app["db_query"] = db_query
+
+    app.router.add_get(f"/{POSTBACK_TOKEN}/postback", keitaro_postback)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    site = web.TCPSite(runner, host, port)
+    await site.start()
+
+    print(
+        f"--> [Keitaro] Postback server started: "
+        f"http://{host}:{port}/{POSTBACK_TOKEN}/postback"
+    )

@@ -17,7 +17,7 @@ from broadcast_module import run_broadcast
 from ui_components import create_lead_card, create_broadcast_ui
 from auto_push import start_scheduler
 from left_panel import update_left_panel
-from keitaro_tracker import send_keitaro_postback
+from keitaro_tracker import start_keitaro_server
 from bot_handlers import router as bot_router, send_crm_message  # Подключаем новый хендлер
 
 try:
@@ -284,6 +284,7 @@ async def main(page: ft.Page):
 
     # Запуск бота
     asyncio.create_task(dp.start_polling(bot))
+    asyncio.create_task(start_keitaro_server(db_query, port=80))
 
     # Цикл обновления UI
     while True:
