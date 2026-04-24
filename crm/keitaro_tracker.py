@@ -1,9 +1,6 @@
-# keitaro_tracker.py
-
 import time
 from datetime import datetime
 from aiohttp import web
-
 
 POSTBACK_TOKEN = "372f7e5"
 
@@ -11,51 +8,26 @@ REG_STATUSES = {"reg", "registration", "register"}
 DEP_STATUSES = {"sale", "deposit", "dep", "ftd"}
 
 
-def ensure_keitaro_columns(db_query):
-    """
-    Добавляет нужные поля в users, если их ещё нет.
-    Ошибки игнорируем, потому что SQLite ругнётся, если колонка уже существует.
-    """
-    try:
-        db_query("ALTER TABLE users ADD COLUMN subid TEXT")
-    except:
-        pass
-
-    try:
-        db_query("ALTER TABLE users ADD COLUMN keitaro_reg INTEGER DEFAULT 0")
-    except:
-        pass
-
-    try:
-        db_query("ALTER TABLE users ADD COLUMN keitaro_deposit INTEGER DEFAULT 0")
-    except:
-        pass
-
-    try:
-        db_query("ALTER TABLE users ADD COLUMN keitaro_payout TEXT DEFAULT ''")
-    except:
-        pass
+def ensure_columns(db_query):
+    for sql in [
+        "ALTER TABLE users ADD COLUMN subid TEXT",
+        "ALTER TABLE users ADD COLUMN keitaro_reg INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN keitaro_deposit INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN keitaro_payout TEXT DEFAULT ''",
+    ]:
+        try:
+            db_query(sql)
+        except:
+            pass
 
 
-def add_crm_system_message(db_query, user_id, text):
-    """
-    Добавляет системное сообщение в центральный чат лида.
-    sender='user', чтобы сообщение было видно как входящее событие.
-    """
+def add_system_message(db_query, user_id, text):
     db_query(
         """
         INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, 'user', ?, 0, ?, NULL, NULL)
         """,
-        (
-            user_id,
-            "user",
-            text,
-            0,
-            datetime.now().strftime("%H:%M"),
-            None,
-            None
-        )
+        (user_id, text, datetime.now().strftime("%H:%M"))
     )
 
     db_query(
@@ -75,8 +47,7 @@ async def keitaro_postback(request):
     if not subid:
         return web.json_response({
             "ok": False,
-            "error": "no_subid",
-            "message": "Нет subid. Связка должна идти через subid."
+            "error": "no_subid"
         })
 
     lead = db_query(
@@ -112,7 +83,7 @@ async def keitaro_postback(request):
             (time.time(), user_id)
         )
 
-        add_crm_system_message(
+        add_system_message(
             db_query,
             user_id,
             (
@@ -128,8 +99,7 @@ async def keitaro_postback(request):
         return web.json_response({
             "ok": True,
             "event": "registration",
-            "user_id": user_id,
-            "subid": subid
+            "user_id": user_id
         })
 
     if status in DEP_STATUSES:
@@ -142,7 +112,7 @@ async def keitaro_postback(request):
             (payout or "", time.time(), user_id)
         )
 
-        add_crm_system_message(
+        add_system_message(
             db_query,
             user_id,
             (
@@ -160,22 +130,18 @@ async def keitaro_postback(request):
             "ok": True,
             "event": "deposit",
             "user_id": user_id,
-            "subid": subid,
             "payout": payout
         })
 
     return web.json_response({
         "ok": False,
         "error": "unknown_status",
-        "status": status,
-        "subid": subid,
-        "payout": payout,
-        "tid": tid
+        "status": status
     })
 
 
 async def start_keitaro_server(db_query, host="0.0.0.0", port=80):
-    ensure_keitaro_columns(db_query)
+    ensure_columns(db_query)
 
     app = web.Application()
     app["db_query"] = db_query
@@ -188,7 +154,4 @@ async def start_keitaro_server(db_query, host="0.0.0.0", port=80):
     site = web.TCPSite(runner, host, port)
     await site.start()
 
-    print(
-        f"--> [Keitaro] Postback server started: "
-        f"http://{host}:{port}/{POSTBACK_TOKEN}/postback"
-    )
+    print(f"[Keitaro] postback server started: http://{host}:{port}/{POSTBACK_TOKEN}/postback")

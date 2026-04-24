@@ -20,13 +20,34 @@ def db_query_local(sql, params=(), fetch=False):
     res = None
     try:
         cursor.execute(sql, params)
-        if fetch: res = cursor.fetchall()
+        if fetch:
+            res = cursor.fetchall()
         conn.commit()
     except Exception as e:
         print(f"DB Error: {e}")
     finally:
         conn.close()
     return res
+
+
+def extract_start_arg(text: str) -> str:
+    """
+    Достаёт subid из /start.
+    Нормально должно приходить так:
+    /start abc123
+
+    На всякий случай поддерживает и кривой вариант:
+    /startabc123
+    """
+    text = text or ""
+
+    if text.startswith("/start "):
+        return text.split(maxsplit=1)[1].strip()
+
+    if text.startswith("/start") and len(text) > 6:
+        return text.replace("/start", "", 1).strip()
+
+    return ""
 
 
 @router.message()
@@ -56,14 +77,19 @@ async def handle_any_message(message: types.Message):
 
                 db_query_local(
                     "INSERT INTO messages (user_id, sender, text, is_read, time, media_type) VALUES (?, 'admin', ?, 1, ?, ?)",
-                    (target_id, reply_text, now_time, "media" if not message.text else None))
-                db_query_local("UPDATE users SET last_ts = ? WHERE user_id = ?", (current_ts, target_id))
+                    (target_id, reply_text, now_time, "media" if not message.text else None)
+                )
+                db_query_local(
+                    "UPDATE users SET last_ts = ? WHERE user_id = ?",
+                    (current_ts, target_id)
+                )
                 return
             except:
                 return
 
     # --- 2. ЛИД (ЗАПИСЬ И ПЕРЕСЫЛКА) ---
     media_type, media_id = None, None
+
     if message.photo:
         media_type, media_id = "photo", message.photo[-1].file_id
     elif message.voice:
@@ -73,10 +99,14 @@ async def handle_any_message(message: types.Message):
     elif message.document:
         media_type, media_id = "document", message.document.file_id
 
-    # Запись в базу (Лид всегда виден сразу)
+    # Запись сообщения лида в базу
     db_query_local(
-        "INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id) VALUES (?, 'user', ?, 0, ?, ?, ?)",
-        (uid, text, now_time, media_type, media_id))
+        """
+        INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id)
+        VALUES (?, 'user', ?, 0, ?, ?, ?)
+        """,
+        (uid, text, now_time, media_type, media_id)
+    )
 
     if media_id:
         try:
@@ -88,53 +118,113 @@ async def handle_any_message(message: types.Message):
             pass
 
     # --- 3. ВОРОНКА ---
-    res = db_query_local("SELECT step, tags FROM users WHERE user_id=?", (uid,), fetch=True)
+    res = db_query_local(
+        "SELECT step, tags FROM users WHERE user_id=?",
+        (uid,),
+        fetch=True
+    )
 
     if not res:
-        args = text.split()[1] if text.startswith('/start ') else ""
+        args = extract_start_arg(text)
         geo = get_geo_data(args)
+
         db_query_local(
-            "INSERT INTO users (user_id, username, full_name, created_at, last_ts, step, tags, is_blocked, channel) VALUES (?, ?, ?, ?, ?, '1', ?, 0, ?)",
-            (uid, message.from_user.username, message.from_user.full_name, datetime.now().strftime("%d.%m.%Y %H:%M"),
-             current_ts, geo['label'], geo['channel']))
-        curr_step, curr_tags = "1", geo['label']
+            """
+            INSERT INTO users (
+                user_id,
+                username,
+                full_name,
+                created_at,
+                last_ts,
+                step,
+                tags,
+                is_blocked,
+                channel,
+                subid
+            )
+            VALUES (?, ?, ?, ?, ?, '1', ?, 0, ?, ?)
+            """,
+            (
+                uid,
+                message.from_user.username,
+                message.from_user.full_name,
+                datetime.now().strftime("%d.%m.%Y %H:%M"),
+                current_ts,
+                geo["label"],
+                geo["channel"],
+                args
+            )
+        )
+
+        curr_step, curr_tags = "1", geo["label"]
+
     else:
         curr_step, curr_tags = res[0]
-        db_query_local("UPDATE users SET last_ts = ?, is_blocked = 0 WHERE user_id = ?", (current_ts, uid))
 
-    if "Прошел воронку" in (curr_tags or ""): return
+        args = extract_start_arg(text)
+        if args:
+            db_query_local(
+                "UPDATE users SET subid=?, last_ts=?, is_blocked=0 WHERE user_id=?",
+                (args, current_ts, uid)
+            )
+        else:
+            db_query_local(
+                "UPDATE users SET last_ts=?, is_blocked=0 WHERE user_id=?",
+                (current_ts, uid)
+            )
+
+    if "Прошел воронку" in (curr_tags or ""):
+        return
 
     # Если бот уже в процессе отправки воронки для этого юзера
-    if curr_step == 'processing':
+    if curr_step == "processing":
         return
 
     if curr_step in FUNNEL:
         stage = FUNNEL[curr_step]
 
-        # Блокируем повторный вход: ставим временный статус
         next_step_final = stage["next"]
-        db_query_local("UPDATE users SET step='processing' WHERE user_id=?", (uid,))
+        db_query_local(
+            "UPDATE users SET step='processing' WHERE user_id=?",
+            (uid,)
+        )
 
         if stage.get("save_to"):
-            db_query_local(f"UPDATE users SET {stage['save_to']} = ? WHERE user_id = ?", (text, uid))
+            db_query_local(
+                f"UPDATE users SET {stage['save_to']} = ? WHERE user_id = ?",
+                (text, uid)
+            )
 
         if stage.get("text"):
             for part in [p.strip() for p in stage["text"].split("\n\n") if p.strip()]:
-                await asyncio.sleep(2.5)  # Задержка между частями текста
+                await asyncio.sleep(2.5)
                 try:
                     await message.answer(part)
+
                     db_query_local(
-                        "INSERT INTO messages (user_id, sender, text, is_read, time) VALUES (?, 'admin', ?, 1, ?)",
-                        (uid, part, now_time))
+                        """
+                        INSERT INTO messages (user_id, sender, text, is_read, time)
+                        VALUES (?, 'admin', ?, 1, ?)
+                        """,
+                        (uid, part, now_time)
+                    )
                 except:
                     pass
 
         # Завершаем этап: ставим финальный шаг и теги
-        t_list = [t.strip() for t in (curr_tags or "").split(',') if t.strip() and "шаг" not in t]
-        if stage.get("tag"): t_list.append(stage.get("tag"))
+        t_list = [
+            t.strip()
+            for t in (curr_tags or "").split(",")
+            if t.strip() and "шаг" not in t
+        ]
 
-        db_query_local("UPDATE users SET step=?, tags=? WHERE user_id=?",
-                       (next_step_final, ",".join(filter(None, t_list)), uid))
+        if stage.get("tag"):
+            t_list.append(stage.get("tag"))
+
+        db_query_local(
+            "UPDATE users SET step=?, tags=? WHERE user_id=?",
+            (next_step_final, ",".join(filter(None, t_list)), uid)
+        )
 
 
 async def send_crm_message(bot: Bot, user_id: int, text: str, media_type=None, media_id=None):
@@ -151,8 +241,20 @@ async def send_crm_message(bot: Bot, user_id: int, text: str, media_type=None, m
             await bot.send_message(user_id, text=text)
 
         db_query_local(
-            "INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id) VALUES (?, 'admin', ?, 1, ?, ?, ?)",
-            (user_id, text, datetime.now().strftime("%H:%M"), media_type, media_id))
+            """
+            INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id)
+            VALUES (?, 'admin', ?, 1, ?, ?, ?)
+            """,
+            (
+                user_id,
+                text,
+                datetime.now().strftime("%H:%M"),
+                media_type,
+                media_id
+            )
+        )
+
         return True
+
     except:
         return False
