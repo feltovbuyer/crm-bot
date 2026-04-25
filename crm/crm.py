@@ -25,14 +25,15 @@ try:
 except ImportError:
     FUNNEL = {}
 
-# Настройки бота
-load_dotenv()
-API_TOKEN = os.getenv("BOT_TOKEN")
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher()
+bots_config = []
 
-# РЕГИСТРАЦИЯ РОУТЕРА (Должна быть ПЕРЕД любыми другими хендлерами)
-dp.include_router(bot_router)
+for key, value in os.environ.items():
+    if key.startswith("BOT_G") and value.strip():
+        channel = "Г" + key.replace("BOT_G", "")
+        bots_config.append((channel, value.strip()))
+
+bots_by_channel = {}
+default_bot = None
 
 
 # --- РАБОТА С БАЗОЙ ДАННЫХ ---
@@ -70,6 +71,25 @@ def init_db():
 
 
 init_db()
+
+async def start_bot_instance(token, channel):
+    local_bot = Bot(token=token)
+    local_bot.crm_channel = channel
+
+    local_dp = Dispatcher()
+    local_dp.include_router(bot_router)
+
+    bots_by_channel[channel] = local_bot
+
+    print(f"Запущен бот {channel}")
+    await local_dp.start_polling(local_bot)
+
+
+def get_bot_for_user(user_id):
+    res = db_query("SELECT channel FROM users WHERE user_id=?", (user_id,), fetch=True)
+    if res:
+        return bots_by_channel.get(res[0][0]) or default_bot
+    return default_bot
 
 
 # --- ОСНОВНОЙ ИНТЕРФЕЙС FLET ---
@@ -221,7 +241,8 @@ async def main(page: ft.Page):
             txt = msg_in.value
             msg_in.value = ""
             # Используем новую функцию из bot_handlers для отправки и записи в базу
-            success = await send_crm_message(bot, state["active_id"], txt)
+            target_bot = get_bot_for_user(state["active_id"])
+            success = await send_crm_message(target_bot, state["active_id"], txt)
             if success:
                 # Обновляем время активности, чтобы чат поднялся наверх
                 db_query("UPDATE users SET last_ts = ? WHERE user_id = ?", (time.time(), state["active_id"]))
@@ -247,7 +268,7 @@ async def main(page: ft.Page):
 
         # Вызываем логику из файла
         success_count = await run_broadcast(
-            bot=bot,
+            bot=default_bot,
             text=br_ui["input"].value,
             progress_callback=update_status,
             target_tag=br_ui["tag"].value,
@@ -283,7 +304,29 @@ async def main(page: ft.Page):
     page.add(ft.Stack([crm_view, br_ui["view"]], expand=True))
 
     # Запуск бота
-    asyncio.create_task(dp.start_polling(bot))
+    global default_bot
+
+    global default_bot
+
+    polling_bots = []
+
+    for i, (channel, token) in enumerate(bots_config):
+        task_bot = Bot(token=token)
+        task_bot.crm_channel = channel
+
+        if i == 0:
+            default_bot = task_bot
+
+        bots_by_channel[channel] = task_bot
+        polling_bots.append(task_bot)
+
+        print(f"Запущен бот {channel}")
+
+    multi_dp = Dispatcher()
+    multi_dp.include_router(bot_router)
+
+    asyncio.create_task(multi_dp.start_polling(*polling_bots))
+
     asyncio.create_task(start_keitaro_server(db_query, port=80))
 
     # Цикл обновления UI
