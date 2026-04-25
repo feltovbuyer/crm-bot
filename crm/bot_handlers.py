@@ -133,8 +133,8 @@ async def handle_any_message(message: types.Message):
 
     if not res:
         args = extract_start_arg(text)
-        geo = get_geo_data("")
-        channel = getattr(message.bot, "crm_channel", "Г1")
+        geo = get_geo_data("Г")
+        channel = getattr(message.bot, "crm_channel", BOT_CHANNEL)
 
         db_query_local(
             """
@@ -158,8 +158,8 @@ async def handle_any_message(message: types.Message):
                 message.from_user.full_name,
                 datetime.now().strftime("%d.%m.%Y %H:%M"),
                 current_ts,
+                geo["label"],
                 channel,
-                BOT_CHANNEL,
                 args
             )
         )
