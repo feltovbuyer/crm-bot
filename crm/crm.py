@@ -97,6 +97,8 @@ def get_bot_for_user(user_id):
 
 # --- ОСНОВНОЙ ИНТЕРФЕЙС FLET ---
 async def main(page: ft.Page):
+    selected_file = {"path": None, "name": None}
+    selected_file_label = ft.Text("", size=12, color="#a2c7f5")
     page.title = "Adeola CRM PRO"
     page.theme_mode = ft.ThemeMode.DARK
     page.window_width = 1450
@@ -107,6 +109,26 @@ async def main(page: ft.Page):
         "search_text": "",
         "search_tag": ""
     }
+
+    def clear_selected_file(e=None):
+        selected_file["path"] = None
+        selected_file["name"] = None
+        selected_file_label.value = ""
+
+
+
+        page.update()
+
+        clear_btn = ft.IconButton(
+            ft.Icons.CLOSE,
+            icon_size=16,
+            on_click=clear_selected_file,
+            icon_color="#ff6b6b",
+            visible=False
+        )
+
+
+
 
     # Удаление тега кликом по нему
     async def delete_tag(tag_val):
@@ -155,8 +177,6 @@ async def main(page: ft.Page):
         ui["save_btn"].text, ui["save_btn"].bgcolor = "Сохранить", None
         page.update()
 
-    selected_file = {"path": None, "name": None}
-
     async def pick_file(e):
         file_picker = ft.FilePicker()
         files = await file_picker.pick_files(allow_multiple=False)
@@ -164,7 +184,22 @@ async def main(page: ft.Page):
         if files:
             selected_file["path"] = files[0].path
             selected_file["name"] = files[0].name
-            print("Файл выбран:", selected_file["path"])
+            clear_btn.visible = True
+            clear_btn.visible = False
+
+            ext = os.path.splitext(files[0].name)[1].lower()
+
+            if ext in [".jpg", ".jpeg", ".png", ".webp"]:
+                icon = "🖼"
+            elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
+                icon = "🎬"
+            elif ext in [".mp3", ".ogg", ".wav", ".m4a"]:
+                icon = "🎤"
+            else:
+                icon = "📄"
+
+            selected_file_label.value = f"{icon} {files[0].name}"
+            page.update()
 
     # Выбор пользователя в левой панели
     async def select_user(uid):
@@ -206,6 +241,34 @@ async def main(page: ft.Page):
             update_left_panel(user_list, db_query, state, page, select_user)
             await refresh_c(force=True)
 
+    def open_image_preview(url):
+        dlg = ft.AlertDialog(
+            modal=True,
+            content=ft.Container(
+                content=ft.Image(
+                    src=url,
+                    width=700,
+                    height=700,
+                    fit="contain"
+                ),
+                padding=10
+            ),
+            actions=[
+                ft.TextButton(
+                    "Закрыть",
+                    on_click=lambda e: close_image_preview(dlg)
+                )
+            ]
+        )
+
+        page.overlay.append(dlg)
+        dlg.open = True
+        page.update()
+
+    def close_image_preview(dlg):
+        dlg.open = False
+        page.update()
+
     # Обновление чата
     async def refresh_c(force=False):
         if not state["active_id"]: return
@@ -233,16 +296,15 @@ async def main(page: ft.Page):
                     d_text = m_text
 
                 chat_col.controls.append(
-                    ft.Row([
-                        ft.Container(
-                            content=ft.Column([
-                                ft.Text(d_text, size=15),
-                                ft.Text(m_time, size=10, color="#707579")
-                            ], spacing=2),
-                            bgcolor="#182533" if m_sender == "admin" else "#2b5278",
-                            padding=12, border_radius=12, width=350
-                        )
-                    ], alignment=ft.MainAxisAlignment.END if m_sender == "admin" else ft.MainAxisAlignment.START)
+                    build_message_content(
+                        m_sender,
+                        m_text,
+                        m_time,
+                        m_type,
+                        get_bot_for_user(state["active_id"]).token,
+                        m_media_id,
+                        open_image_preview
+                    )
                 )
             db_query("UPDATE messages SET is_read=1 WHERE user_id=? AND sender='user'", (state["active_id"],))
             state["last_count"] = count
@@ -252,12 +314,15 @@ async def main(page: ft.Page):
 
     # Отправка сообщения админом
     async def send_m(e=None):
+        clear_btn.visible = True
+        clear_btn.visible = False
         if not state["active_id"]:
             return
 
         txt = msg_in.value or ""
         file_path = selected_file.get("path")
         file_name = selected_file.get("name")
+
 
         if not txt and not file_path:
             return
@@ -319,11 +384,23 @@ async def main(page: ft.Page):
                 success = await send_crm_message(target_bot, state["active_id"], txt)
 
             if success:
+                clear_btn.visible = True
+                clear_btn.visible = False
                 db_query(
                     "UPDATE users SET last_ts = ? WHERE user_id = ?",
                     (time.time(), state["active_id"])
                 )
+
+                selected_file["path"] = None
+                selected_file["name"] = None
+                selected_file_label.value = ""
+
                 await refresh_c(force=True)
+
+                selected_file["path"] = None
+                selected_file["name"] = None
+                selected_file_label.value = ""
+
                 page.update()
 
         except Exception as ex:
@@ -366,6 +443,14 @@ async def main(page: ft.Page):
     user_list, chat_col = ft.Column(scroll="always", expand=True), ft.Column(scroll="always", expand=True, spacing=10)
     msg_in = ft.TextField(hint_text="Введите сообщение...", expand=True, on_submit=send_m, border_radius=10)
 
+    clear_btn = ft.IconButton(
+        ft.Icons.CLOSE,
+        icon_size=16,
+        on_click=clear_selected_file,
+        icon_color="#ff6b6b",
+        visible=False
+    )
+
     crm_view = ft.Row([
         ft.Container(content=ft.Column(
             [ft.FilledButton("Рассылка", on_click=lambda _: toggle(True), width=330, height=45),
@@ -373,20 +458,26 @@ async def main(page: ft.Page):
         ft.Container(
             content=ft.Column([
                 chat_col,
-                ft.Row([
-                    ft.IconButton(
-                        ft.Icons.ATTACH_FILE,
-                        icon_size=28,
-                        on_click=pick_file,
-                        icon_color="#a2c7f5"
-                    ),
-                    msg_in,
-                    ft.IconButton(
-                        ft.Icons.SEND_ROUNDED,
-                        icon_size=30,
-                        on_click=send_m,
-                        icon_color="#a2c7f5"
-                    )
+                ft.Column([
+                    ft.Row([
+                        selected_file_label,
+                        clear_btn
+                    ]),
+                    ft.Row([
+                        ft.IconButton(
+                            ft.Icons.ATTACH_FILE,
+                            icon_size=28,
+                            on_click=pick_file,
+                            icon_color="#a2c7f5"
+                        ),
+                        msg_in,
+                        ft.IconButton(
+                            ft.Icons.SEND_ROUNDED,
+                            icon_size=30,
+                            on_click=send_m,
+                            icon_color="#a2c7f5"
+                        )
+                    ])
                 ])
             ]),
             expand=True,

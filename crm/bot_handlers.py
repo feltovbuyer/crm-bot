@@ -98,7 +98,9 @@ async def handle_any_message(message: types.Message):
     media_type, media_id = None, None
 
     if message.photo:
-        media_type, media_id = "photo", message.photo[-1].file_id
+        file = await message.bot.get_file(message.photo[-1].file_id)
+        media_type = "photo"
+        media_id = file.file_path
     elif message.voice:
         media_type, media_id = "voice", message.voice.file_id
     elif message.video_note:
@@ -114,15 +116,6 @@ async def handle_any_message(message: types.Message):
         """,
         (uid, text, now_time, media_type, media_id)
     )
-
-    if media_id:
-        try:
-            if media_type == "video_note":
-                await message.copy_to(chat_id=ADMIN_ID)
-            else:
-                await message.copy_to(chat_id=ADMIN_ID, caption=f"Медиа от {uid}\n{text}")
-        except:
-            pass
 
     # --- 3. ВОРОНКА ---
     res = db_query_local(

@@ -1,19 +1,33 @@
 import flet as ft
 
 
-def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=None):
+def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=None, open_image_preview=None):
     elements = []
 
     if m_type == "photo" and media_id:
-        url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
-        elements.append(
-            ft.Image(
+        if media_id.startswith("photos/"):
+            url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
+
+            image = ft.Image(
                 src=url,
                 width=250,
                 height=250,
-                fit=ft.ImageFit.CONTAIN
+                fit="contain"
             )
-        )
+
+            if open_image_preview:
+                elements.append(
+                    ft.GestureDetector(
+                        content=image,
+                        on_tap=lambda e, u=url: open_image_preview(u)
+                    )
+                )
+            else:
+                elements.append(image)
+        else:
+            elements.append(
+                ft.Text("🖼 Фото без предпросмотра", size=13)
+            )
 
     elif m_type == "document" and media_id:
         url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
