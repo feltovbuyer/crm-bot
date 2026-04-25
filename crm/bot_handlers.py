@@ -4,6 +4,11 @@ import asyncio
 from aiogram import Router, types, Bot
 from datetime import datetime
 from utils import get_geo_data
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+BOT_CHANNEL = os.getenv("BOT_CHANNEL", "Г1")
 
 try:
     from config import FUNNEL
@@ -12,6 +17,8 @@ except ImportError:
 
 router = Router()
 ADMIN_ID = 8544500750
+BOT_CHANNEL = os.getenv("BOT_CHANNEL", "Г1")
+print("BOT_CHANNEL:", BOT_CHANNEL)
 
 
 def db_query_local(sql, params=(), fetch=False):
@@ -126,7 +133,7 @@ async def handle_any_message(message: types.Message):
 
     if not res:
         args = extract_start_arg(text)
-        geo = get_geo_data("")
+        geo = get_geo_data(BOT_CHANNEL)
 
         db_query_local(
             """
@@ -151,7 +158,7 @@ async def handle_any_message(message: types.Message):
                 datetime.now().strftime("%d.%m.%Y %H:%M"),
                 current_ts,
                 geo["label"],
-                geo["channel"],
+                BOT_CHANNEL,
                 args
             )
         )
@@ -177,8 +184,11 @@ async def handle_any_message(message: types.Message):
         return
 
     # Если бот уже в процессе отправки воронки для этого юзера
-    if curr_step == "processing":
-        return
+    if curr_step == 'processing':
+        db_query_local(
+            "UPDATE users SET step='1' WHERE user_id=?",
+            (uid,)
+        )
 
     if curr_step in FUNNEL:
         stage = FUNNEL[curr_step]

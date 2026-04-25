@@ -60,6 +60,7 @@ def to_float(value):
 
 
 async def keitaro_postback(request):
+    return web.json_response({"test": "MY_KEITARO_TRACKER_IS_WORKING"})
     db_query = request.app["db_query"]
 
     subid = request.query.get("subid")
