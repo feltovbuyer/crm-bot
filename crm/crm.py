@@ -5,6 +5,7 @@ import time
 import json
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
+from filescrm import build_message_content
 from utils import get_geo_data
 from aiogram.exceptions import TelegramForbiddenError
 
@@ -12,6 +13,8 @@ import os
 from dotenv import load_dotenv
 
 from broadcast_module import run_broadcast
+
+
 
 # Импортируем твои компоненты и логику из внешних файлов
 from ui_components import create_lead_card, create_broadcast_ui
@@ -152,6 +155,17 @@ async def main(page: ft.Page):
         ui["save_btn"].text, ui["save_btn"].bgcolor = "Сохранить", None
         page.update()
 
+    selected_file = {"path": None, "name": None}
+
+    async def pick_file(e):
+        file_picker = ft.FilePicker()
+        files = await file_picker.pick_files(allow_multiple=False)
+
+        if files:
+            selected_file["path"] = files[0].path
+            selected_file["name"] = files[0].name
+            print("Файл выбран:", selected_file["path"])
+
     # Выбор пользователя в левой панели
     async def select_user(uid):
         state["active_id"], state["last_count"] = int(uid), 0
@@ -199,12 +213,13 @@ async def main(page: ft.Page):
         count = res[0][0] if res else 0
         if count != state["last_count"] or force:
             # ТЯНЕМ КОЛОНКУ media_type (msg[3])
-            ms = db_query("SELECT sender, text, time, media_type FROM messages WHERE user_id=? ORDER BY id ASC",
+            ms = db_query(
+                "SELECT sender, text, time, media_type, media_id FROM messages WHERE user_id=? ORDER BY id ASC",
                           (state["active_id"],), fetch=True)
 
             chat_col.controls = []
             for m in ms:
-                m_sender, m_text, m_time, m_type = m
+                m_sender, m_text, m_time, m_type, m_media_id = m
 
                 # Логика заглушек для медиа в чате CRM
                 if not m_text and m_type:
@@ -237,17 +252,82 @@ async def main(page: ft.Page):
 
     # Отправка сообщения админом
     async def send_m(e=None):
-        if state["active_id"] and msg_in.value:
-            txt = msg_in.value
-            msg_in.value = ""
-            # Используем новую функцию из bot_handlers для отправки и записи в базу
-            target_bot = get_bot_for_user(state["active_id"])
-            success = await send_crm_message(target_bot, state["active_id"], txt)
+        if not state["active_id"]:
+            return
+
+        txt = msg_in.value or ""
+        file_path = selected_file.get("path")
+        file_name = selected_file.get("name")
+
+        if not txt and not file_path:
+            return
+
+        msg_in.value = ""
+
+        target_bot = get_bot_for_user(state["active_id"])
+        if not target_bot:
+            print("Нет бота для отправки")
+            return
+
+        media_type = None
+        media_id = None
+        success = False
+
+        try:
+            if file_path:
+                ext = os.path.splitext(file_path)[1].lower()
+
+                if ext in [".jpg", ".jpeg", ".png", ".webp"]:
+                    sent = await target_bot.send_photo(
+                        state["active_id"],
+                        photo=types.FSInputFile(file_path),
+                        caption=txt
+                    )
+                    file = await target_bot.get_file(sent.photo[-1].file_id)
+                    media_type = "photo"
+                    media_id = file.file_path
+
+                else:
+                    sent = await target_bot.send_document(
+                        state["active_id"],
+                        document=types.FSInputFile(file_path),
+                        caption=txt
+                    )
+                    file = await target_bot.get_file(sent.document.file_id)
+                    media_type = "document"
+                    media_id = file.file_path
+
+                db_query(
+                    """
+                    INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id)
+                    VALUES (?, 'admin', ?, 1, ?, ?, ?)
+                    """,
+                    (
+                        state["active_id"],
+                        txt or file_name or "",
+                        datetime.now().strftime("%H:%M"),
+                        media_type,
+                        media_id
+                    )
+                )
+
+                selected_file["path"] = None
+                selected_file["name"] = None
+                success = True
+
+            else:
+                success = await send_crm_message(target_bot, state["active_id"], txt)
+
             if success:
-                # Обновляем время активности, чтобы чат поднялся наверх
-                db_query("UPDATE users SET last_ts = ? WHERE user_id = ?", (time.time(), state["active_id"]))
+                db_query(
+                    "UPDATE users SET last_ts = ? WHERE user_id = ?",
+                    (time.time(), state["active_id"])
+                )
                 await refresh_c(force=True)
                 page.update()
+
+        except Exception as ex:
+            print("FILE SEND ERROR:", ex)
 
     # Инициализация интерфейса
     ui, br_ui = create_lead_card(), create_broadcast_ui()
@@ -290,9 +370,29 @@ async def main(page: ft.Page):
         ft.Container(content=ft.Column(
             [ft.FilledButton("Рассылка", on_click=lambda _: toggle(True), width=330, height=45),
              ft.Divider(height=10, color="transparent"), user_list]), width=360, bgcolor="#17212b", padding=15),
-        ft.Container(content=ft.Column([chat_col, ft.Row(
-            [msg_in, ft.IconButton(ft.Icons.SEND_ROUNDED, icon_size=30, on_click=send_m, icon_color="#a2c7f5")])]),
-                     expand=True, bgcolor="#0e1621", padding=20),
+        ft.Container(
+            content=ft.Column([
+                chat_col,
+                ft.Row([
+                    ft.IconButton(
+                        ft.Icons.ATTACH_FILE,
+                        icon_size=28,
+                        on_click=pick_file,
+                        icon_color="#a2c7f5"
+                    ),
+                    msg_in,
+                    ft.IconButton(
+                        ft.Icons.SEND_ROUNDED,
+                        icon_size=30,
+                        on_click=send_m,
+                        icon_color="#a2c7f5"
+                    )
+                ])
+            ]),
+            expand=True,
+            bgcolor="#0e1621",
+            padding=20
+        ),
         ui["view"]
     ], expand=True)
 
