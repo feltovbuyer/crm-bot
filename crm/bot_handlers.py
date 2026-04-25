@@ -102,11 +102,24 @@ async def handle_any_message(message: types.Message):
         media_type = "photo"
         media_id = file.file_path
     elif message.voice:
-        media_type, media_id = "voice", message.voice.file_id
-    elif message.video_note:
-        media_type, media_id = "video_note", message.video_note.file_id
+        file = await message.bot.get_file(message.voice.file_id)
+        media_type = "voice"
+        media_id = file.file_path
+
     elif message.document:
-        media_type, media_id = "document", message.document.file_id
+        file = await message.bot.get_file(message.document.file_id)
+        media_type = "document"
+        media_id = file.file_path
+
+    elif message.video_note:
+        file = await message.bot.get_file(message.video_note.file_id)
+        media_type = "video_note"
+        media_id = file.file_path
+
+    elif message.video:
+        file = await message.bot.get_file(message.video.file_id)
+        media_type = "video"
+        media_id = file.file_path
 
     # Запись сообщения лида в базу
     db_query_local(

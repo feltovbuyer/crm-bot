@@ -25,27 +25,55 @@ def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=
             else:
                 elements.append(image)
         else:
-            elements.append(
-                ft.Text("🖼 Фото без предпросмотра", size=13)
-            )
+            elements.append(ft.Text("🖼 Фото без предпросмотра", size=13))
 
     elif m_type == "document" and media_id:
-        url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
-        elements.append(
-            ft.TextButton("📄 Скачать файл", url=url)
-        )
+        if "/" in media_id:
+            url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
+            elements.append(
+                ft.Row([
+                    ft.Text("📄 Файл"),
+                    ft.TextButton("⬇ Скачать", url=url)
+                ])
+            )
+        else:
+            elements.append(ft.Text("📄 Старый файл без ссылки", size=13))
 
     elif m_type == "voice" and media_id:
-        url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
-        elements.append(
-            ft.TextButton("🎤 Открыть голосовое", url=url)
-        )
+        if "/" in media_id:
+            url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
+            elements.append(
+                ft.Row([
+                    ft.Text("🎤 Голосовое"),
+                    ft.TextButton("▶ Открыть", url=url)
+                ])
+            )
+        else:
+            elements.append(ft.Text("🎤 Старое голосовое без ссылки", size=13))
 
     elif m_type == "video_note" and media_id:
-        url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
-        elements.append(
-            ft.TextButton("🔘 Открыть кружок", url=url)
-        )
+        if "/" in media_id:
+            url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
+            elements.append(
+                ft.Row([
+                    ft.Text("🔘 Кружок"),
+                    ft.TextButton("▶ Открыть", url=url)
+                ])
+            )
+        else:
+            elements.append(ft.Text("🔘 Старый кружок без ссылки", size=13))
+
+    elif m_type == "video" and media_id:
+        if "/" in media_id:
+            url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
+            elements.append(
+                ft.Row([
+                    ft.Text("🎬 Видео"),
+                    ft.TextButton("▶ Открыть", url=url)
+                ])
+            )
+        else:
+            elements.append(ft.Text("🎬 Старое видео без ссылки", size=13))
 
     if m_text:
         elements.append(ft.Text(m_text, size=15))
