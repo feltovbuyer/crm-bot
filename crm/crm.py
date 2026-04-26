@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from filescrm import build_message_content
+from admin_panel import create_admin_ui
 from utils import get_geo_data
 from aiogram.exceptions import TelegramForbiddenError
 
@@ -13,6 +14,7 @@ import os
 from dotenv import load_dotenv
 
 from broadcast_module import run_broadcast
+from authadmin import open_admin_login
 
 
 
@@ -140,6 +142,14 @@ async def main(page: ft.Page):
                 tags.remove(tag_val)
                 db_query("UPDATE users SET tags=? WHERE user_id=?", (",".join(tags), state["active_id"]))
                 await select_user(state["active_id"])
+
+    def toggle_admin(s):
+        admin_view.visible = s
+        crm_view.visible = not s
+        br_ui["view"].visible = False
+        page.update()
+
+    admin_view = create_admin_ui(lambda e: toggle_admin(False), db_query)
 
     # Окно выбора статуса (тега)
     async def show_tag_dialog(e):
@@ -452,47 +462,89 @@ async def main(page: ft.Page):
     )
 
     crm_view = ft.Row([
-        ft.Container(content=ft.Column(
-            [ft.FilledButton("Рассылка", on_click=lambda _: toggle(True), width=330, height=45),
-             ft.Divider(height=10, color="transparent"), user_list]), width=360, bgcolor="#17212b", padding=15),
-        ft.Container(
-            content=ft.Column([
-                chat_col,
-                ft.Column([
-                    ft.Row([
-                        selected_file_label,
-                        clear_btn
-                    ]),
-                    ft.Row([
-                        ft.IconButton(
-                            ft.Icons.ATTACH_FILE,
-                            icon_size=28,
-                            on_click=pick_file,
-                            icon_color="#a2c7f5"
-                        ),
-                        msg_in,
-                        ft.IconButton(
-                            ft.Icons.SEND_ROUNDED,
-                            icon_size=30,
-                            on_click=send_m,
-                            icon_color="#a2c7f5"
-                        )
-                    ])
+    ft.Container(
+        content=ft.Column([
+            ft.FilledButton(
+                "Рассылка",
+                on_click=lambda _: toggle(True),
+                width=330,
+                height=45
+            ),
+            ft.Divider(height=10, color="transparent"),
+            user_list
+        ]),
+        width=360,
+        bgcolor="#17212b",
+        padding=15
+    ),
+
+    ft.Container(
+        content=ft.Column([
+            chat_col,
+            ft.Column([
+                ft.Row([
+                    selected_file_label,
+                    clear_btn
+                ]),
+                ft.Row([
+                    ft.IconButton(
+                        ft.Icons.ATTACH_FILE,
+                        icon_size=28,
+                        on_click=pick_file,
+                        icon_color="#a2c7f5"
+                    ),
+                    msg_in,
+                    ft.IconButton(
+                        ft.Icons.SEND_ROUNDED,
+                        icon_size=30,
+                        on_click=send_m,
+                        icon_color="#a2c7f5"
+                    )
                 ])
-            ]),
-            expand=True,
-            bgcolor="#0e1621",
-            padding=20
-        ),
-        ui["view"]
-    ], expand=True)
+            ])
+        ]),
+        expand=True,
+        bgcolor="#0e1621",
+        padding=20
+    ),
+
+    ui["view"]
+], expand=True)
 
     def toggle(s):
         br_ui["view"].visible, crm_view.visible = s, not s
         page.update()
 
     br_ui["back_btn"].on_click = lambda _: toggle(False)
-    page.add(ft.Stack([crm_view, br_ui["view"]], expand=True))
+
+    def toggle_admin(s):
+        admin_view.visible = s
+        crm_view.visible = not s
+        br_ui["view"].visible = False
+        page.update()
+
+
+    page.add(
+        ft.Stack([
+            crm_view,
+            br_ui["view"],
+            admin_view,
+
+            ft.Container(
+                content=ft.IconButton(
+                    ft.Icons.ADMIN_PANEL_SETTINGS,
+                    on_click=lambda _: open_admin_login(page, lambda: toggle_admin(True)),
+                    icon_size=6,
+                    icon_color="#1e2732",
+                    style=ft.ButtonStyle(padding=0)
+                ),
+                top=-2,
+                left=1,
+                padding=0
+            )
+        ],
+            expand=True)
+    )
 
     # Запуск бота
     global default_bot
