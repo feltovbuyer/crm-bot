@@ -13,12 +13,12 @@ def create_admin_ui(on_back, db_query):
         total_text.value = str(db_query("SELECT COUNT(*) FROM users", fetch=True)[0][0])
 
         regs_text.value = str(db_query(
-            "SELECT COUNT(*) FROM users WHERE tags LIKE '%Регистрация%' OR keitaro_reg=1",
+            "SELECT COUNT(*) FROM users WHERE tags LIKE '%Регистрация%'",
             fetch=True
         )[0][0])
 
         deps_text.value = str(db_query(
-            "SELECT COUNT(*) FROM users WHERE tags LIKE '%Депозит%' OR keitaro_deposit=1",
+            "SELECT COUNT(*) FROM users WHERE tags LIKE '%Депозит%'",
             fetch=True
         )[0][0])
 

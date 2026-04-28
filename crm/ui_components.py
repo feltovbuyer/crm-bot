@@ -45,16 +45,61 @@ def create_lead_card():
 
 def create_broadcast_ui():
     msg = ft.TextField(label="Текст", multiline=True)
-    tag = ft.Dropdown(label="Тег", value="Все",
-                      options=[ft.dropdown.Option("Все"), ft.dropdown.Option("ФД"), ft.dropdown.Option("РД"),
-                               ft.dropdown.Option("Прошел воронку")])
-    date = ft.TextField(label="Дата")
+
+    tag = ft.Dropdown(
+        label="Тег",
+        value="Все",
+        options=[
+            ft.dropdown.Option("Все"),
+            ft.dropdown.Option("Гана"),
+            ft.dropdown.Option("ФД"),
+            ft.dropdown.Option("РД"),
+            ft.dropdown.Option("Регистрация"),
+            ft.dropdown.Option("Депозит"),
+            ft.dropdown.Option("Прошел воронку"),
+            ft.dropdown.Option("403"),
+        ]
+    )
+
+    date_from = ft.TextField(label="Дата от", hint_text="18.04.2026", width=160)
+    date_to = ft.TextField(label="Дата до", hint_text="20.04.2026", width=160)
+
+    file_label = ft.Text("", size=12, color="#a2c7f5")
+    file_btn = ft.ElevatedButton("Прикрепить файл", icon="ATTACH_FILE")
+
     count = ft.Text("Активных чатов: 0")
     status = ft.Text("Готов")
     btn = ft.ElevatedButton("Пуск", icon="PLAY_ARROW")
     back = ft.TextButton("Назад")
+
     view = ft.Container(
-        content=ft.Column([ft.Text("Рассылка", size=24), msg, tag, date, count, status, ft.Row([btn, back])]),
-        visible=False, padding=40, bgcolor="#0e1621", expand=True)
-    return {"view": view, "input": msg, "tag": tag, "date": date, "count_info": count, "btn": btn, "back_btn": back,
-            "status": status}
+        content=ft.Column([
+            ft.Text("Рассылка", size=24),
+            msg,
+            tag,
+            ft.Row([date_from, date_to]),
+            ft.Row([file_btn, file_label]),
+            count,
+            status,
+            ft.Row([btn, back])
+        ]),
+        visible=False,
+        padding=40,
+        bgcolor="#0e1621",
+        expand=True
+    )
+
+    return {
+        "view": view,
+        "input": msg,
+        "tag": tag,
+        "date": date_from,
+        "date_to": date_to,
+        "file_btn": file_btn,
+        "file_label": file_label,
+        "file_path": None,
+        "count_info": count,
+        "btn": btn,
+        "back_btn": back,
+        "status": status
+    }

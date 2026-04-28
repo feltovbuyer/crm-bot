@@ -418,11 +418,27 @@ async def main(page: ft.Page):
 
     # Инициализация интерфейса
     ui, br_ui = create_lead_card(), create_broadcast_ui()
+
+    async def pick_broadcast_file(e):
+        print("КНОПКА ФАЙЛА НАЖАТА")
+
+        file_picker = ft.FilePicker()
+        files = await file_picker.pick_files(allow_multiple=False)
+
+        if files:
+            br_ui["file_path"] = files[0].path
+            br_ui["file_label"].value = f"📎 {files[0].name}"
+            page.update()
+            print("Файл рассылки выбран:", files[0].path)
+
+    br_ui["file_btn"].on_click = pick_broadcast_file
     async def on_broadcast_start(e):
         if not br_ui["input"].value:
             br_ui["status"].value = "⚠️ Введите текст!"
             page.update()
             return
+
+
 
         br_ui["status"].value = "🚀 Рассылка запущена..."
         br_ui["btn"].disabled = True
@@ -439,10 +455,15 @@ async def main(page: ft.Page):
             text=br_ui["input"].value,
             progress_callback=update_status,
             target_tag=br_ui["tag"].value,
-            target_date=br_ui["date"].value if br_ui["date"].value else None
+            target_date=br_ui["date"].value if br_ui["date"].value else None,
+            target_date_to=br_ui["date_to"].value if br_ui["date_to"].value else None,
+            file_path=br_ui["file_path"],
+            get_bot_for_user=get_bot_for_user
         )
 
         br_ui["status"].value = f"✅ Готово! Отправлено: {success_count}"
+        br_ui["file_path"] = None
+        br_ui["file_label"].value = ""
         br_ui["btn"].disabled = False
         page.update()
 
@@ -538,8 +559,8 @@ async def main(page: ft.Page):
                     icon_color="#1e2732",
                     style=ft.ButtonStyle(padding=0)
                 ),
-                top=-2,
-                left=1,
+                top=-20,
+                left=-22,
                 padding=0
             )
         ],

@@ -171,6 +171,40 @@ async def handle_any_message(message: types.Message):
         )
 
         curr_step, curr_tags = "1", geo["label"]
+        if text.startswith("/start"):
+            stage = FUNNEL.get("1")
+
+            if stage and stage.get("text"):
+                db_query_local(
+                    "UPDATE users SET step='processing' WHERE user_id=?",
+                    (uid,)
+                )
+
+                for part in [p.strip() for p in stage["text"].split("\n\n") if p.strip()]:
+                    await asyncio.sleep(2.5)
+                    await message.answer(part)
+
+                    db_query_local(
+                        """
+                        INSERT INTO messages (user_id, sender, text, is_read, time)
+                        VALUES (?, 'admin', ?, 1, ?)
+                        """,
+                        (uid, part, datetime.now().strftime("%H:%M"))
+                    )
+
+                t_list = [
+                    t.strip()
+                    for t in (geo["label"] or "").split(",")
+                    if t.strip() and "шаг" not in t
+                ]
+                t_list.append("1 шаг")
+
+                db_query_local(
+                    "UPDATE users SET step='1', tags=? WHERE user_id=?",
+                    (",".join(t_list), uid)
+                )
+
+            return
 
     else:
         curr_step, curr_tags = res[0]
@@ -190,27 +224,43 @@ async def handle_any_message(message: types.Message):
     if "Прошел воронку" in (curr_tags or ""):
         return
 
-    # Если бот уже в процессе отправки воронки для этого юзера
-    if curr_step == 'processing':
-        db_query_local(
-            "UPDATE users SET step='1' WHERE user_id=?",
-            (uid,)
-        )
+    if curr_step == "processing":
+        return
 
     if curr_step in FUNNEL:
-        stage = FUNNEL[curr_step]
+        current_stage = FUNNEL[curr_step]
 
-        next_step_final = stage["next"]
+        # сохраняем ответ лида на текущий шаг
+        if current_stage.get("save_to"):
+            db_query_local(
+                f"UPDATE users SET {current_stage['save_to']} = ? WHERE user_id = ?",
+                (text, uid)
+            )
+
+        next_step = current_stage["next"]
+
+        # если воронка закончилась
+        if next_step == "FINISH":
+            t_list = [
+                t.strip()
+                for t in (curr_tags or "").split(",")
+                if t.strip() and "шаг" not in t
+            ]
+            t_list.append("Прошел воронку")
+
+            db_query_local(
+                "UPDATE users SET step='FINISH', tags=? WHERE user_id=?",
+                (",".join(t_list), uid)
+            )
+            return
+
+        # отправляем следующий шаг
+        stage = FUNNEL[next_step]
+
         db_query_local(
             "UPDATE users SET step='processing' WHERE user_id=?",
             (uid,)
         )
-
-        if stage.get("save_to"):
-            db_query_local(
-                f"UPDATE users SET {stage['save_to']} = ? WHERE user_id = ?",
-                (text, uid)
-            )
 
         if stage.get("text"):
             for part in [p.strip() for p in stage["text"].split("\n\n") if p.strip()]:
@@ -223,12 +273,11 @@ async def handle_any_message(message: types.Message):
                         INSERT INTO messages (user_id, sender, text, is_read, time)
                         VALUES (?, 'admin', ?, 1, ?)
                         """,
-                        (uid, part, now_time)
+                        (uid, part, datetime.now().strftime("%H:%M"))
                     )
                 except:
                     pass
 
-        # Завершаем этап: ставим финальный шаг и теги
         t_list = [
             t.strip()
             for t in (curr_tags or "").split(",")
@@ -240,9 +289,8 @@ async def handle_any_message(message: types.Message):
 
         db_query_local(
             "UPDATE users SET step=?, tags=? WHERE user_id=?",
-            (next_step_final, ",".join(filter(None, t_list)), uid)
+            (next_step, ",".join(filter(None, t_list)), uid)
         )
-
 
 async def send_crm_message(bot: Bot, user_id: int, text: str, media_type=None, media_id=None):
     try:
