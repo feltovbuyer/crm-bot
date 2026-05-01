@@ -72,6 +72,7 @@ def init_db():
         db_query("ALTER TABLE messages ADD COLUMN media_type TEXT")
         db_query("ALTER TABLE messages ADD COLUMN media_id TEXT")
         db_query("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
+        db_query("ALTER TABLE users ADD COLUMN subid TEXT DEFAULT ''")
     except:
         pass
 

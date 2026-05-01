@@ -5,7 +5,7 @@ def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=
     elements = []
 
     if m_type == "photo" and media_id:
-        if media_id.startswith("photos/"):
+        if "/" in media_id:
             url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
 
             image = ft.Image(

@@ -61,6 +61,7 @@ def extract_start_arg(text: str) -> str:
 async def handle_any_message(message: types.Message):
     uid = message.from_user.id
     text = message.text or message.caption or ""
+    print("LEAD RAW:", uid, repr(text), message.content_type)
     now_time = datetime.now().strftime("%H:%M")
     current_ts = time.time()
 

@@ -1,2 +1,5 @@
-.env
-*.dbgit --version
+crm/crm.db
+crm/.env
+crm/venv/
+__pycache__/
+*.pyc
