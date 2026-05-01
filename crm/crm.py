@@ -108,6 +108,7 @@ async def show_crm(page: ft.Page):
     selected_file = {"path": None, "name": None, "uploading": False}
     file_picker = ft.FilePicker()
     page.overlay.append(file_picker)
+    file_picker.visible = False
     selected_file_label = ft.Text("", size=12, color="#a2c7f5")
     page.title = "Adeola CRM PRO"
     page.theme_mode = ft.ThemeMode.DARK
@@ -194,6 +195,7 @@ async def show_crm(page: ft.Page):
 
     file_picker = ft.FilePicker()
     page.overlay.append(file_picker)
+    file_picker.visible = False
 
     def pick_file(e):
         file_picker.pick_files(allow_multiple=False)
