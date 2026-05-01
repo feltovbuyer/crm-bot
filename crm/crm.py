@@ -200,7 +200,7 @@ async def show_crm(page: ft.Page):
     def pick_file(e):
         file_picker.pick_files(allow_multiple=False)
 
-    def on_file_result(e: ft.FilePickerResultEvent):
+    def on_file_result(e):
         if not e.files:
             return
 
@@ -225,7 +225,7 @@ async def show_crm(page: ft.Page):
             )
         ])
 
-    def on_upload(e: ft.FilePickerUploadEvent):
+    def on_upload(e):
         if e.progress < 1:
             selected_file_label.value = f"⏳ Загрузка... {int(e.progress * 100)}%"
             page.update()
