@@ -19,7 +19,7 @@ async def main(page: ft.Page):
     async def login_click(e):
         if login_field.value == USER_LOGIN and pass_field.value == USER_PASS:
             page.controls.clear()
-            await crm.main(page)
+            await crm.show_crm(page)
         else:
             error_text.value = "Неверный логин или пароль!"
             page.update()
@@ -37,4 +37,9 @@ async def main(page: ft.Page):
     )
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.app(
+        target=main,
+        view=ft.AppView.WEB_BROWSER,
+        host="0.0.0.0",
+        port=8550
+    )

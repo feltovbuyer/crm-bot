@@ -12,6 +12,7 @@ from aiogram.exceptions import TelegramForbiddenError
 
 import os
 from dotenv import load_dotenv
+load_dotenv()
 
 from broadcast_module import run_broadcast
 from authadmin import open_admin_login
@@ -98,7 +99,7 @@ def get_bot_for_user(user_id):
 
 
 # --- ОСНОВНОЙ ИНТЕРФЕЙС FLET ---
-async def main(page: ft.Page):
+async def show_crm(page: ft.Page):
     selected_file = {"path": None, "name": None}
     selected_file_label = ft.Text("", size=12, color="#a2c7f5")
     page.title = "Adeola CRM PRO"
@@ -116,7 +117,6 @@ async def main(page: ft.Page):
         selected_file["path"] = None
         selected_file["name"] = None
         selected_file_label.value = ""
-
 
 
         page.update()
@@ -591,7 +591,7 @@ async def main(page: ft.Page):
 
     asyncio.create_task(multi_dp.start_polling(*polling_bots))
 
-    asyncio.create_task(start_keitaro_server(db_query, port=80))
+    asyncio.create_task(start_keitaro_server(db_query, port=8080))
 
     # Цикл обновления UI
     while True:
@@ -602,5 +602,3 @@ async def main(page: ft.Page):
         await asyncio.sleep(1)
 
 
-if __name__ == "__main__":
-    ft.run(main)
