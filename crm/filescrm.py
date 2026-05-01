@@ -12,7 +12,7 @@ def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=
                 src=url,
                 width=250,
                 height=250,
-                fit=ft.ImageFit.CONTAIN
+                fit="contain"
             )
 
             elements.append(image)
