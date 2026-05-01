@@ -192,13 +192,17 @@ async def show_crm(page: ft.Page):
         ui["save_btn"].text, ui["save_btn"].bgcolor = "Сохранить", None
         page.update()
 
-    async def pick_file(e):
-        result = await file_picker.pick_files(allow_multiple=False)
+    file_picker = ft.FilePicker()
+    page.overlay.append(file_picker)
 
-        if not result or not result.files:
+    def pick_file(e):
+        file_picker.pick_files(allow_multiple=False)
+
+    def on_file_result(e: ft.FilePickerResultEvent):
+        if not e.files:
             return
 
-        f = result.files[0]
+        f = e.files[0]
         ext = os.path.splitext(f.name)[1].lower()
         server_name = f"{uuid.uuid4().hex}{ext}"
         server_path = os.path.join(UPLOAD_DIR, server_name)
@@ -212,17 +216,23 @@ async def show_crm(page: ft.Page):
 
         upload_url = page.get_upload_url(server_name, 600)
 
-        upload_result = file_picker.upload([
+        file_picker.upload([
             ft.FilePickerUploadFile(
                 name=f.name,
                 upload_url=upload_url
             )
         ])
 
-        if asyncio.iscoroutine(upload_result):
-            await upload_result
+    def on_upload(e: ft.FilePickerUploadEvent):
+        if e.progress < 1:
+            selected_file_label.value = f"⏳ Загрузка... {int(e.progress * 100)}%"
+            page.update()
+            return
 
         selected_file["uploading"] = False
+
+        name = selected_file.get("name", "")
+        ext = os.path.splitext(name)[1].lower()
 
         if ext in [".jpg", ".jpeg", ".png", ".webp"]:
             icon = "🖼"
@@ -233,9 +243,12 @@ async def show_crm(page: ft.Page):
         else:
             icon = "📄"
 
-        selected_file_label.value = f"{icon} {f.name}"
+        selected_file_label.value = f"{icon} {name}"
         clear_btn.visible = True
         page.update()
+
+    file_picker.on_result = on_file_result
+    file_picker.on_upload = on_upload
 
     # Выбор пользователя в левой панели
     async def select_user(uid):
