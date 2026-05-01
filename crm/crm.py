@@ -106,9 +106,6 @@ def get_bot_for_user(user_id):
 # --- ОСНОВНОЙ ИНТЕРФЕЙС FLET ---
 async def show_crm(page: ft.Page):
     selected_file = {"path": None, "name": None, "uploading": False}
-    file_picker = ft.FilePicker()
-    page.overlay.append(file_picker)
-    file_picker.visible = False
     selected_file_label = ft.Text("", size=12, color="#a2c7f5")
     page.title = "Adeola CRM PRO"
     page.theme_mode = ft.ThemeMode.DARK
@@ -194,11 +191,10 @@ async def show_crm(page: ft.Page):
         page.update()
 
     file_picker = ft.FilePicker()
-    page.overlay.append(file_picker)
-    file_picker.visible = False
+    page.services.append(file_picker)
 
     def pick_file(e):
-        file_picker.pick_files(allow_multiple=False)
+        page.run_task(file_picker.pick_files, allow_multiple=False)
 
     def on_file_result(e):
         if not e.files:
@@ -224,6 +220,11 @@ async def show_crm(page: ft.Page):
                 upload_url=upload_url
             )
         ])
+        try:
+            br_ui["file_path"] = server_path
+            br_ui["file_label"].value = f"📎 {f.name}"
+        except Exception:
+            pass
 
     def on_upload(e):
         if e.progress < 1:
@@ -470,17 +471,9 @@ async def show_crm(page: ft.Page):
     # Инициализация интерфейса
     ui, br_ui = create_lead_card(), create_broadcast_ui()
 
-    async def pick_broadcast_file(e):
+    def pick_broadcast_file(e):
         print("КНОПКА ФАЙЛА НАЖАТА")
-
-        file_picker = ft.FilePicker()
-        files = await file_picker.pick_files(allow_multiple=False)
-
-        if files:
-            br_ui["file_path"] = files[0].path
-            br_ui["file_label"].value = f"📎 {files[0].name}"
-            page.update()
-            print("Файл рассылки выбран:", files[0].path)
+        page.run_task(file_picker.pick_files, allow_multiple=False)
 
     br_ui["file_btn"].on_click = pick_broadcast_file
     async def on_broadcast_start(e):
