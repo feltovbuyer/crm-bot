@@ -190,68 +190,7 @@ async def show_crm(page: ft.Page):
         ui["save_btn"].text, ui["save_btn"].bgcolor = "Сохранить", None
         page.update()
 
-    file_picker = ft.FilePicker()
-    page.services.append(file_picker)
 
-    def pick_file(e):
-        page.run_task(file_picker.pick_files, allow_multiple=False)
-
-    def on_file_result(e):
-        if not e.files:
-            return
-
-        f = e.files[0]
-        ext = os.path.splitext(f.name)[1].lower()
-        server_name = f"{uuid.uuid4().hex}{ext}"
-        server_path = os.path.join(UPLOAD_DIR, server_name)
-
-        selected_file["path"] = server_path
-        selected_file["name"] = f.name
-        selected_file["uploading"] = True
-
-        selected_file_label.value = f"⏳ Загружаю {f.name}..."
-        page.update()
-
-        upload_url = page.get_upload_url(server_name, 600)
-
-        file_picker.upload([
-            ft.FilePickerUploadFile(
-                name=f.name,
-                upload_url=upload_url
-            )
-        ])
-        try:
-            br_ui["file_path"] = server_path
-            br_ui["file_label"].value = f"📎 {f.name}"
-        except Exception:
-            pass
-
-    def on_upload(e):
-        if e.progress < 1:
-            selected_file_label.value = f"⏳ Загрузка... {int(e.progress * 100)}%"
-            page.update()
-            return
-
-        selected_file["uploading"] = False
-
-        name = selected_file.get("name", "")
-        ext = os.path.splitext(name)[1].lower()
-
-        if ext in [".jpg", ".jpeg", ".png", ".webp"]:
-            icon = "🖼"
-        elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
-            icon = "🎬"
-        elif ext in [".mp3", ".ogg", ".wav", ".m4a"]:
-            icon = "🎤"
-        else:
-            icon = "📄"
-
-        selected_file_label.value = f"{icon} {name}"
-        clear_btn.visible = True
-        page.update()
-
-    file_picker.on_result = on_file_result
-    file_picker.on_upload = on_upload
 
     # Выбор пользователя в левой панели
     async def select_user(uid):
@@ -472,8 +411,7 @@ async def show_crm(page: ft.Page):
     ui, br_ui = create_lead_card(), create_broadcast_ui()
 
     def pick_broadcast_file(e):
-        print("КНОПКА ФАЙЛА НАЖАТА")
-        page.run_task(file_picker.pick_files, allow_multiple=False)
+        on_click = lambda e: print("FilePicker отключён на VPS")
 
     br_ui["file_btn"].on_click = pick_broadcast_file
     async def on_broadcast_start(e):
@@ -555,7 +493,7 @@ async def show_crm(page: ft.Page):
                     ft.IconButton(
                         ft.Icons.ATTACH_FILE,
                         icon_size=28,
-                        on_click=pick_file,
+                        on_click=lambda e: print("FilePicker отключён на VPS"),
                         icon_color="#a2c7f5"
                     ),
                     msg_in,
