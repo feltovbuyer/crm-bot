@@ -12,18 +12,15 @@ def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=
                 src=url,
                 width=250,
                 height=250,
-                fit="contain"
+                fit=ft.ImageFit.CONTAIN
             )
 
-            if open_image_preview:
-                elements.append(
-                    ft.GestureDetector(
-                        content=image,
-                        on_tap=lambda e, u=url: open_image_preview(u)
-                    )
-                )
-            else:
-                elements.append(image)
+            elements.append(image)
+
+            # КНОПКА НА ВСЯКИЙ СЛУЧАЙ (для проверки)
+            elements.append(
+                ft.TextButton("🔗 Открыть фото", url=url)
+            )
         else:
             elements.append(ft.Text("🖼 Фото без предпросмотра", size=13))
 

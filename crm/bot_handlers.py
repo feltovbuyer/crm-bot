@@ -68,9 +68,19 @@ async def handle_any_message(message: types.Message):
     # --- 1. АДМИН (ОТПРАВКА ИЗ ТГ) ---
     if uid == ADMIN_ID:
         parts = text.split(maxsplit=1)
-        if parts and parts[0].isdigit():
+
+        # Админ-команда только если есть ID + текст или медиа
+        if parts and parts[0].isdigit() and (
+                len(parts) > 1
+                or message.photo
+                or message.voice
+                or message.document
+                or message.video_note
+                or message.video
+        ):
             target_id = int(parts[0])
             reply_text = parts[1] if len(parts) > 1 else ""
+
             try:
                 if message.photo:
                     await message.bot.send_photo(target_id, message.photo[-1].file_id, caption=reply_text)
