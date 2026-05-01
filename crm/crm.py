@@ -110,10 +110,13 @@ async def show_crm(page: ft.Page):
     file_picker = ft.FilePicker()
     page.services.append(file_picker)
 
-    def pick_file(e):
-        page.run_task(file_picker.pick_files, allow_multiple=False)
+    async def pick_file(e):
+        print("PICK FILE CLICK")
+        await file_picker.pick_files(allow_multiple=False)
 
     def on_file_result(e):
+        print("FILE RESULT:", e.files)
+
         if not e.files:
             return
 
@@ -142,6 +145,8 @@ async def show_crm(page: ft.Page):
         )
 
     def on_upload(e):
+        print("UPLOAD EVENT:", e.progress)
+
         if e.progress < 1:
             selected_file_label.value = f"⏳ Загрузка... {int(e.progress * 100)}%"
             page.update()
