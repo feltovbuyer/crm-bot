@@ -8,21 +8,26 @@ def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=
         if "/" in media_id:
             url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
 
-            image = ft.Image(
-                src=url,
-                width=250,
-                height=250,
-                fit="contain"
-            )
+            if m_type == "photo" and media_id:
+                if "/" in media_id:
+                    url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
 
-            elements.append(image)
+                    image = ft.Image(
+                        src=url,
+                        width=250,
+                        height=250,
+                        fit="contain",
+                        error_content=ft.Text("🖼 Фото не загрузилось, откройте кнопкой")
+                    )
 
-            # КНОПКА НА ВСЯКИЙ СЛУЧАЙ (для проверки)
-            elements.append(
-                ft.TextButton("🔗 Открыть фото", url=url)
-            )
-        else:
-            elements.append(ft.Text("🖼 Фото без предпросмотра", size=13))
+                    elements.append(image)
+
+                    # кнопка открытия (обязательно оставляем)
+                    elements.append(
+                        ft.TextButton("🔗 Открыть фото", url=url)
+                    )
+                else:
+                    elements.append(ft.Text("🖼 Фото без предпросмотра", size=13))
 
     elif m_type == "document" and media_id:
         if "/" in media_id:
