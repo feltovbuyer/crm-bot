@@ -1,3 +1,5 @@
+import base64
+import urllib.request
 import flet as ft
 
 
@@ -8,26 +10,32 @@ def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=
         if "/" in media_id:
             url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
 
-            if m_type == "photo" and media_id:
-                if "/" in media_id:
-                    url = f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
+            try:
+                with urllib.request.urlopen(url, timeout=10) as response:
+                    img_bytes = response.read()
 
-                    image = ft.Image(
-                        src=url,
+                img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+
+                elements.append(
+                    ft.Image(
+                        src_base64=img_base64,
                         width=250,
                         height=250,
-                        fit="contain",
-                        error_content=ft.Text("🖼 Фото не загрузилось, откройте кнопкой")
+                        fit="contain"
                     )
+                )
 
-                    elements.append(image)
+            except Exception as ex:
+                print("PHOTO PREVIEW ERROR:", ex)
+                elements.append(
+                    ft.Text("🖼 Фото не загрузилось внутри CRM", size=13)
+                )
 
-                    # кнопка открытия (обязательно оставляем)
-                    elements.append(
-                        ft.TextButton("🔗 Открыть фото", url=url)
-                    )
-                else:
-                    elements.append(ft.Text("🖼 Фото без предпросмотра", size=13))
+            elements.append(
+                ft.TextButton("🔗 Открыть фото", url=url)
+            )
+        else:
+            elements.append(ft.Text("🖼 Фото без предпросмотра", size=13))
 
     elif m_type == "document" and media_id:
         if "/" in media_id:

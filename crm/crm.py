@@ -7,12 +7,16 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from filescrm import build_message_content
 from admin_panel import create_admin_ui
+import uuid
 from utils import get_geo_data
 from aiogram.exceptions import TelegramForbiddenError
 
 import os
 from dotenv import load_dotenv
 load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 from broadcast_module import run_broadcast
 from authadmin import open_admin_login
@@ -101,7 +105,9 @@ def get_bot_for_user(user_id):
 
 # --- ОСНОВНОЙ ИНТЕРФЕЙС FLET ---
 async def show_crm(page: ft.Page):
-    selected_file = {"path": None, "name": None}
+    selected_file = {"path": None, "name": None, "uploading": False}
+    file_picker = ft.FilePicker()
+    page.overlay.append(file_picker)
     selected_file_label = ft.Text("", size=12, color="#a2c7f5")
     page.title = "Adeola CRM PRO"
     page.theme_mode = ft.ThemeMode.DARK
@@ -115,20 +121,18 @@ async def show_crm(page: ft.Page):
     }
 
     def clear_selected_file(e=None):
+        if selected_file.get("path") and os.path.exists(selected_file["path"]):
+            try:
+                os.remove(selected_file["path"])
+            except Exception as ex:
+                print("TEMP FILE DELETE ERROR:", ex)
+
         selected_file["path"] = None
         selected_file["name"] = None
+        selected_file["uploading"] = False
         selected_file_label.value = ""
-
-
+        clear_btn.visible = False
         page.update()
-
-        clear_btn = ft.IconButton(
-            ft.Icons.CLOSE,
-            icon_size=16,
-            on_click=clear_selected_file,
-            icon_color="#ff6b6b",
-            visible=False
-        )
 
 
 
@@ -189,28 +193,49 @@ async def show_crm(page: ft.Page):
         page.update()
 
     async def pick_file(e):
-        file_picker = ft.FilePicker()
-        files = await file_picker.pick_files(allow_multiple=False)
+        result = await file_picker.pick_files(allow_multiple=False)
 
-        if files:
-            selected_file["path"] = files[0].path
-            selected_file["name"] = files[0].name
-            clear_btn.visible = True
-            clear_btn.visible = False
+        if not result or not result.files:
+            return
 
-            ext = os.path.splitext(files[0].name)[1].lower()
+        f = result.files[0]
+        ext = os.path.splitext(f.name)[1].lower()
+        server_name = f"{uuid.uuid4().hex}{ext}"
+        server_path = os.path.join(UPLOAD_DIR, server_name)
 
-            if ext in [".jpg", ".jpeg", ".png", ".webp"]:
-                icon = "🖼"
-            elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
-                icon = "🎬"
-            elif ext in [".mp3", ".ogg", ".wav", ".m4a"]:
-                icon = "🎤"
-            else:
-                icon = "📄"
+        selected_file["path"] = server_path
+        selected_file["name"] = f.name
+        selected_file["uploading"] = True
 
-            selected_file_label.value = f"{icon} {files[0].name}"
-            page.update()
+        selected_file_label.value = f"⏳ Загружаю {f.name}..."
+        page.update()
+
+        upload_url = page.get_upload_url(server_name, 600)
+
+        upload_result = file_picker.upload([
+            ft.FilePickerUploadFile(
+                name=f.name,
+                upload_url=upload_url
+            )
+        ])
+
+        if asyncio.iscoroutine(upload_result):
+            await upload_result
+
+        selected_file["uploading"] = False
+
+        if ext in [".jpg", ".jpeg", ".png", ".webp"]:
+            icon = "🖼"
+        elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
+            icon = "🎬"
+        elif ext in [".mp3", ".ogg", ".wav", ".m4a"]:
+            icon = "🎤"
+        else:
+            icon = "📄"
+
+        selected_file_label.value = f"{icon} {f.name}"
+        clear_btn.visible = True
+        page.update()
 
     # Выбор пользователя в левой панели
     async def select_user(uid):
@@ -333,6 +358,10 @@ async def show_crm(page: ft.Page):
         txt = msg_in.value or ""
         file_path = selected_file.get("path")
         file_name = selected_file.get("name")
+        if selected_file.get("uploading"):
+            selected_file_label.value = "⏳ Файл ещё загружается..."
+            page.update()
+            return
 
 
         if not txt and not file_path:
@@ -411,6 +440,12 @@ async def show_crm(page: ft.Page):
                 selected_file["path"] = None
                 selected_file["name"] = None
                 selected_file_label.value = ""
+
+                if file_path and os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                    except Exception as ex:
+                        print("TEMP FILE DELETE ERROR:", ex)
 
                 page.update()
 
