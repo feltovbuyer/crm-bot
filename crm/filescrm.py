@@ -22,51 +22,15 @@ def build_message_content(
     url = tg_file_url(bot_token, media_id)
 
     if m_type == "photo" and url:
-
-        def load_photo_base64(u=url):
-            import urllib.request
-            import base64
-
-            with urllib.request.urlopen(u, timeout=10) as response:
-                img_bytes = response.read()
-
-            return base64.b64encode(img_bytes).decode("utf-8")
-
-        if show_preview:
-            try:
-                img_base64 = load_photo_base64(url)
-
-                elements.append(
-                    ft.Column([
-                        ft.Image(
-                            src_base64=img_base64,
-                            width=180,
-                            height=180,
-                            fit="contain",
-                        ),
-                        ft.TextButton(
-                            "Открыть фото",
-                            url=url
-                        )
-                    ])
-                )
-
-            except Exception as ex:
-                print("PHOTO PREVIEW ERROR:", ex)
-                elements.append(
-                    ft.TextButton(
-                        "🖼 Открыть фото",
-                        url=url
-                    )
-                )
-
-        else:
-            elements.append(
+        elements.append(
+            ft.Row([
+                ft.Text("🖼 Фото"),
                 ft.TextButton(
-                    "🖼 Открыть фото",
+                    "Открыть",
                     url=url
                 )
-            )
+            ])
+        )
 
     elif m_type == "document" and url:
         elements.append(
