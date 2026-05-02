@@ -237,8 +237,6 @@ async def show_crm(page: ft.Page):
         page.update()
 
     def open_image_preview(src):
-        print("OPEN IMAGE PREVIEW CALLED")
-
         dlg = ft.AlertDialog(
             modal=True,
             content=ft.Container(
@@ -247,7 +245,7 @@ async def show_crm(page: ft.Page):
                 bgcolor="#0e1621",
                 alignment=ft.Alignment(0, 0),
                 content=ft.Image(
-                    src=src,
+                    src=src,  # теперь сюда приходит URL
                     width=620,
                     height=470,
                     fit="contain",
@@ -256,12 +254,14 @@ async def show_crm(page: ft.Page):
             actions=[
                 ft.TextButton(
                     "Закрыть",
-                    on_click=lambda e: page.close(dlg)
+                    on_click=lambda e: close_image_preview(e, dlg)
                 )
             ],
         )
 
-        page.open(dlg)
+        page.overlay.append(dlg)
+        dlg.open = True
+        page.update()
 
     # Окно выбора статуса (тега)
     async def show_tag_dialog(e):

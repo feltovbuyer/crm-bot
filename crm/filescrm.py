@@ -23,72 +23,29 @@ def build_message_content(
 
     if m_type == "photo" and url:
 
-        def open_photo_as_base64(e, u=url):
-            try:
-                print("OPEN PHOTO BUTTON CLICK:", u)
-
-                import urllib.request
-                import base64
-
-                with urllib.request.urlopen(u, timeout=15) as response:
-                    img_bytes = response.read()
-
-                print("PHOTO BYTES:", len(img_bytes))
-
-                img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-                img_src = f"data:image/jpeg;base64,{img_base64}"
-
-                if open_image_preview:
-                    print("CALL OPEN IMAGE PREVIEW")
-                    open_image_preview(img_src)
-                else:
-                    print("NO OPEN IMAGE PREVIEW")
-
-            except Exception as ex:
-                print("OPEN PHOTO BASE64 ERROR:", ex)
-
         if show_preview:
-            try:
-                import urllib.request
-                import base64
+            img = ft.Image(
+                src=url,
+                width=250,
+                height=250,
+                fit="contain",
+            )
 
-                with urllib.request.urlopen(url, timeout=10) as response:
-                    img_bytes = response.read()
-
-                img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-                img_src = f"data:image/jpeg;base64,{img_base64}"
-
-                img = ft.Image(
-                    src=img_src,
-                    width=250,
-                    height=250,
-                    fit="contain",
-                )
-
-                if open_image_preview:
-                    elements.append(
-                        ft.GestureDetector(
-                            content=img,
-                            on_tap=lambda e, src=img_src: open_image_preview(src),
-                        )
-                    )
-                else:
-                    elements.append(img)
-
-            except Exception as ex:
-                print("PHOTO LOAD ERROR:", ex)
+            if open_image_preview:
                 elements.append(
-                    ft.TextButton(
-                        "🖼 Открыть фото",
-                        on_click=open_photo_as_base64
+                    ft.GestureDetector(
+                        content=img,
+                        on_tap=lambda e, u=url: open_image_preview(u),
                     )
                 )
+            else:
+                elements.append(img)
 
         else:
             elements.append(
                 ft.TextButton(
                     "🖼 Открыть фото",
-                    on_click=open_photo_as_base64
+                    on_click=lambda e, u=url: open_image_preview(u) if open_image_preview else None
                 )
             )
 
