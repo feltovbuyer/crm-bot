@@ -422,17 +422,25 @@ async def show_crm(page: ft.Page):
             state["last_count"] = count
             page.update()
             await asyncio.sleep(0.1)
-            await chat_col.scroll_to(offset=-1, duration=200)
+
+            if not state.get("is_loading_more"):
+                await chat_col.scroll_to(offset=-1, duration=200)
 
     async def on_chat_scroll(e):
+        # уже грузим → выходим
         if state.get("is_loading_more"):
             return
 
-        if e.pixels <= 50:
+        # почти вверху
+        if e.pixels <= 50 and not state.get("is_loading_more"):
             state["is_loading_more"] = True
+
+            old_limit = state["chat_limit"]
             state["chat_limit"] += 20
 
-            await refresh_c(force=True)
+            # защита от лишних перезагрузок
+            if state["chat_limit"] != old_limit:
+                await refresh_c(force=True)
 
             state["is_loading_more"] = False
 
@@ -487,6 +495,15 @@ async def show_crm(page: ft.Page):
                     )
                     file = await target_bot.get_file(sent.photo[-1].file_id)
                     media_type = "photo"
+                    media_id = file.file_path
+                elif ext in [".ogg", ".oga"]:
+                    sent = await target_bot.send_voice(
+                        state["active_id"],
+                        voice=types.FSInputFile(file_path),
+                        caption=txt
+                    )
+                    file = await target_bot.get_file(sent.voice.file_id)
+                    media_type = "voice"
                     media_id = file.file_path
 
                 else:
@@ -679,7 +696,6 @@ async def show_crm(page: ft.Page):
         br_ui["view"].visible = False
         page.update()
 
-
     page.add(
         ft.Stack([
             crm_view,
@@ -701,6 +717,10 @@ async def show_crm(page: ft.Page):
         ],
             expand=True)
     )
+
+    update_left_panel(user_list, db_query, state, page, select_user)
+    page.update()
+    await asyncio.sleep(0.1)
 
     # Запуск бота
 
