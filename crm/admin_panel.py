@@ -11,50 +11,61 @@ def create_admin_ui(on_back, db_query):
 
     def refresh_stats(e=None):
         total_text.value = str(db_query("SELECT COUNT(*) FROM users", fetch=True)[0][0])
-
-        regs_text.value = str(db_query(
-            "SELECT COUNT(*) FROM users WHERE tags LIKE '%Регистрация%'",
-            fetch=True
-        )[0][0])
-
-        deps_text.value = str(db_query(
-            "SELECT COUNT(*) FROM users WHERE tags LIKE '%Депозит%'",
-            fetch=True
-        )[0][0])
-
-        blocked_text.value = str(db_query(
-            "SELECT COUNT(*) FROM users WHERE is_blocked=1",
-            fetch=True
-        )[0][0])
-
-        broadcasts_text.value = str(db_query(
-            "SELECT COUNT(*) FROM messages WHERE sender='admin'",
-            fetch=True
-        )[0][0])
+        regs_text.value = str(db_query("SELECT COUNT(*) FROM users WHERE tags LIKE '%Регистрация%'", fetch=True)[0][0])
+        deps_text.value = str(db_query("SELECT COUNT(*) FROM users WHERE tags LIKE '%Депозит%'", fetch=True)[0][0])
+        blocked_text.value = str(db_query("SELECT COUNT(*) FROM users WHERE is_blocked=1", fetch=True)[0][0])
+        broadcasts_text.value = str(db_query("SELECT COUNT(*) FROM messages WHERE sender='admin'", fetch=True)[0][0])
 
     refresh_stats()
 
-    # ================= АВТОПУШИ =================
-
-    push_tag = ft.TextField(label="Тег", width=250)
-    push_delay = ft.TextField(label="Задержка (мин)", width=200, value="15")
-    push_text = ft.TextField(label="Текст", multiline=True, min_lines=3, max_lines=5)
-
+    push_tag = ft.TextField(label="Тег", width=250, hint_text="Например: РД")
+    push_delay = ft.TextField(label="Задержка в минутах", width=250, value="15")
+    push_text = ft.TextField(
+        label="Текст автопуша",
+        width=500,
+        multiline=True,
+        min_lines=3,
+        max_lines=5
+    )
     push_status = ft.Text("", color="#a8c7fa")
 
-    push_list = ft.ListView(expand=True, spacing=8)
+    push_filter = ft.TextField(
+        label="Фильтр по тегу",
+        width=250,
+        hint_text="Например: РД"
+    )
 
-    def load_pushes():
+    push_list = ft.ListView(
+        expand=True,
+        spacing=8,
+        auto_scroll=False
+    )
+
+    def load_pushes(e=None):
         push_list.controls.clear()
 
-        rows = db_query(
-            """
-            SELECT id, tag, text, delay_minutes, enabled
-            FROM auto_push_rules
-            ORDER BY id DESC
-            """,
-            fetch=True
-        ) or []
+        filter_tag = (push_filter.value or "").strip()
+
+        if filter_tag:
+            rows = db_query(
+                """
+                SELECT id, tag, text, delay_minutes, enabled
+                FROM auto_push_rules
+                WHERE tag LIKE ?
+                ORDER BY id DESC
+                """,
+                (f"%{filter_tag}%",),
+                fetch=True
+            ) or []
+        else:
+            rows = db_query(
+                """
+                SELECT id, tag, text, delay_minutes, enabled
+                FROM auto_push_rules
+                ORDER BY id DESC
+                """,
+                fetch=True
+            ) or []
 
         for rule_id, tag, text, delay, enabled in rows:
             preview = text[:120] + ("..." if len(text) > 120 else "")
@@ -64,18 +75,24 @@ def create_admin_ui(on_back, db_query):
                     bgcolor="#17212b",
                     border_radius=10,
                     padding=10,
-                    content=ft.Row([
-                        ft.Text(tag, width=150, weight="bold"),
-                        ft.Text(f"{delay} мин", width=100),
-                        ft.Text(preview, expand=True, size=13),
-                        ft.Text("Вкл" if enabled else "Выкл", width=60),
-                        ft.TextButton(
-                            "Удалить",
-                            on_click=lambda e, rid=rule_id: delete_push(rid)
-                        )
-                    ])
+                    content=ft.Row(
+                        [
+                            ft.Text(tag or "-", width=150, weight="bold"),
+                            ft.Text(f"{delay} мин", width=100),
+                            ft.Text(preview, expand=True, size=13),
+                            ft.Text("Вкл" if enabled else "Выкл", width=60),
+                            ft.TextButton(
+                                "Удалить",
+                                on_click=lambda e, rid=rule_id: delete_push(rid)
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.START,
+                    ),
                 )
             )
+
+        if e:
+            e.page.update()
 
     def add_push(e):
         tag = (push_tag.value or "").strip()
@@ -92,14 +109,17 @@ def create_admin_ui(on_back, db_query):
             return
 
         db_query(
-            "INSERT INTO auto_push_rules (tag, text, delay_minutes, enabled) VALUES (?, ?, ?, 1)",
+            """
+            INSERT INTO auto_push_rules (tag, text, delay_minutes, enabled)
+            VALUES (?, ?, ?, 1)
+            """,
             (tag, text, delay)
         )
 
+        push_status.value = "✅ Автопуш добавлен"
         push_tag.value = ""
         push_text.value = ""
         push_delay.value = "15"
-        push_status.value = "✅ Добавлено"
 
         load_pushes()
         e.page.update()
@@ -108,11 +128,8 @@ def create_admin_ui(on_back, db_query):
         db_query("DELETE FROM auto_push_rules WHERE id=?", (rule_id,))
         load_pushes()
 
-    # ================= СОТРУДНИКИ =================
-
-    staff_login = ft.TextField(label="Логин", width=250)
+    staff_login = ft.TextField(label="Логин менеджера", width=250)
     staff_password = ft.TextField(label="Пароль", width=250)
-
     staff_status = ft.Text("", color="#a8c7fa")
     staff_list = ft.Column(spacing=8)
 
@@ -142,7 +159,10 @@ def create_admin_ui(on_back, db_query):
                     padding=10,
                     content=ft.Row([
                         ft.Text(f"{login} | {role} | {'активен' if active else 'выключен'}", expand=True),
-                        ft.TextButton("Удалить", on_click=lambda e, sid=staff_id: delete_staff(sid))
+                        ft.TextButton(
+                            "Удалить",
+                            on_click=lambda e, sid=staff_id: delete_staff(sid)
+                        )
                     ])
                 )
             )
@@ -158,11 +178,11 @@ def create_admin_ui(on_back, db_query):
 
         try:
             db_query(
-                "INSERT INTO staff (login, password) VALUES (?, ?)",
+                "INSERT INTO staff (login, password, role, active) VALUES (?, ?, 'manager', 1)",
                 (login, password)
             )
 
-            staff_status.value = "✅ Создано"
+            staff_status.value = "✅ Аккаунт создан"
             staff_login.value = ""
             staff_password.value = ""
 
@@ -170,7 +190,7 @@ def create_admin_ui(on_back, db_query):
             e.page.update()
 
         except Exception as ex:
-            staff_status.value = f"❌ {ex}"
+            staff_status.value = f"❌ Ошибка: {ex}"
             e.page.update()
 
     def delete_staff(staff_id):
@@ -179,35 +199,38 @@ def create_admin_ui(on_back, db_query):
 
     load_staff()
 
-    # ================= ЭКРАНЫ =================
+    main_content = ft.Column(
+        expand=True,
+        scroll=ft.ScrollMode.AUTO
+    )
 
-    main_content = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
-    pushes_content = ft.Column(expand=True)
+    pushes_content = ft.Column(
+        expand=True
+    )
 
-    container = ft.Container(
+    admin_container = ft.Container(
         visible=False,
         expand=True,
         bgcolor="#0e1621",
-        padding=25,
+        padding=25
     )
 
     def show_main(e=None):
-        container.content = main_content
+        admin_container.content = main_content
         if e:
             e.page.update()
 
     def show_pushes(e=None):
         load_pushes()
-        container.content = pushes_content
+        admin_container.content = pushes_content
         if e:
             e.page.update()
-
-    # ================= MAIN =================
 
     main_content.controls = [
         ft.TextButton("← Назад", on_click=on_back),
 
         ft.Text("Админ панель", size=24, weight="bold"),
+        ft.Text("Статистика CRM", size=14, color="#707579"),
 
         ft.Divider(),
 
@@ -219,37 +242,80 @@ def create_admin_ui(on_back, db_query):
             broadcasts_text
         ),
 
-        ft.FilledButton("Обновить", on_click=lambda e: (refresh_stats(), e.page.update())),
+        ft.FilledButton(
+            "Обновить статистику",
+            on_click=lambda e: (
+                refresh_stats(),
+                e.page.update()
+            )
+        ),
 
         ft.Divider(),
 
         ft.Row([
-            ft.Text("Автопуши", size=20, weight="bold", expand=True),
-            ft.FilledButton("Открыть список", on_click=show_pushes),
+            ft.Text("Автопуши по тегам", size=20, weight="bold", expand=True),
+            ft.FilledButton(
+                "Открыть список автопушей",
+                on_click=show_pushes
+            ),
         ]),
 
-        ft.Row([push_tag, push_delay]),
+        ft.Text(
+            "Когда менеджер присваивает тег, CRM сама отправит сообщение через указанное время.",
+            color="#707579"
+        ),
+
+        ft.Row([
+            push_tag,
+            push_delay,
+        ]),
+
         push_text,
-        ft.FilledButton("Добавить", on_click=add_push),
+
+        ft.FilledButton(
+            "Добавить автопуш",
+            on_click=add_push
+        ),
+
         push_status,
 
         ft.Divider(),
 
-        ft.Text("Менеджеры", size=20, weight="bold"),
-        ft.Row([staff_login, staff_password]),
-        ft.FilledButton("Создать", on_click=add_staff),
+        ft.Text("Аккаунты менеджеров", size=20, weight="bold"),
+        ft.Text("Создай логин/пароль для входа в CRM", color="#707579"),
+
+        ft.Row([
+            staff_login,
+            staff_password,
+        ]),
+
+        ft.FilledButton(
+            "Создать аккаунт",
+            on_click=add_staff
+        ),
+
         staff_status,
 
-        ft.Text("Список", size=16, weight="bold"),
+        ft.Text("Список аккаунтов", size=16, weight="bold"),
         staff_list,
     ]
 
-    # ================= PUSHES SCREEN =================
-
     pushes_content.controls = [
         ft.Row([
-            ft.TextButton("← Назад", on_click=show_main),
-            ft.Text("Автопуши", size=22, weight="bold"),
+            ft.TextButton("← Назад в админку", on_click=show_main),
+            ft.Text("Список автопушей", size=22, weight="bold"),
+        ]),
+
+        ft.Row([
+            push_filter,
+            ft.FilledButton("Найти", on_click=load_pushes),
+            ft.TextButton(
+                "Сбросить",
+                on_click=lambda e: (
+                    setattr(push_filter, "value", ""),
+                    load_pushes(e)
+                )
+            ),
         ]),
 
         ft.Container(
@@ -257,19 +323,19 @@ def create_admin_ui(on_back, db_query):
             bgcolor="#17212b",
             border_radius=8,
             content=ft.Row([
-                ft.Text("Тег", width=150),
-                ft.Text("Время", width=100),
-                ft.Text("Текст", expand=True),
-                ft.Text("Статус", width=60),
+                ft.Text("Тег", width=150, weight="bold"),
+                ft.Text("Время", width=100, weight="bold"),
+                ft.Text("Текст", expand=True, weight="bold"),
+                ft.Text("Статус", width=60, weight="bold"),
                 ft.Text("", width=80),
             ])
         ),
 
         ft.Container(
             content=push_list,
-            expand=True
+            expand=True,
         )
     ]
 
-    container.content = main_content
-    return container
+    admin_container.content = main_content
+    return admin_container
