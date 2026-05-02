@@ -595,12 +595,17 @@ async def show_crm(page: ft.Page):
     br_ui["btn"].on_click = on_broadcast_start
     ui["save_btn"].on_click, ui["add_tag_btn"].on_click = save_data, show_tag_dialog
 
-    user_list, chat_col = ft.Column(
-    scroll="always",
-    expand=True,
-    spacing=10,
-    on_scroll=on_chat_scroll
-)
+    user_list = ft.Column(
+        scroll="always",
+        expand=True
+    )
+
+    chat_col = ft.Column(
+        scroll="always",
+        expand=True,
+        spacing=10,
+        on_scroll=on_chat_scroll
+    )
     msg_in = ft.TextField(hint_text="Введите сообщение...", expand=True, on_submit=send_m, border_radius=10)
 
     clear_btn = ft.IconButton(
