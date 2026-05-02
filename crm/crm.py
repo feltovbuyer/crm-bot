@@ -197,7 +197,7 @@ async def show_crm(page: ft.Page):
         "folder": "ФД",
         "search_text": "",
         "search_tag": "",
-        "chat_limit": 20,
+        "chat_limit": 100000,
         "is_loading_more": False,
         "need_scroll_bottom": False,
         "last_scroll": 0,
@@ -666,8 +666,7 @@ async def show_crm(page: ft.Page):
     chat_col = ft.Column(
         scroll="always",
         expand=True,
-        spacing=10,
-        on_scroll=on_chat_scroll
+        spacing=10
     )
     msg_in = ft.TextField(hint_text="Введите сообщение...", expand=True, on_submit=send_m, border_radius=10)
 

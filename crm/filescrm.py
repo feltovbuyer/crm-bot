@@ -1,6 +1,5 @@
 import flet as ft
-import urllib.request
-import base64
+
 
 def tg_file_url(bot_token, media_id):
     if not media_id or "/" not in media_id:
@@ -8,48 +7,61 @@ def tg_file_url(bot_token, media_id):
 
     return f"https://api.telegram.org/file/bot{bot_token}/{media_id}"
 
-def build_message_content(m_sender, m_text, m_time, m_type, bot_token, media_id=None, open_image_preview=None,show_preview=True):
+
+def build_message_content(
+    m_sender,
+    m_text,
+    m_time,
+    m_type,
+    bot_token,
+    media_id=None,
+    open_image_preview=None,
+    show_preview=True,
+):
     elements = []
     url = tg_file_url(bot_token, media_id)
 
     if m_type == "photo" and url:
-
         if show_preview:
-            try:
-                import urllib.request, base64
+            img = ft.Image(
+                src=url,
+                width=250,
+                height=250,
+                fit=ft.ImageFit.CONTAIN,
+                border_radius=8,
+            )
 
-                with urllib.request.urlopen(url, timeout=5) as response:
-                    img_bytes = response.read()
+            fallback = ft.TextButton(
+                "🖼 Открыть фото",
+                visible=False,
+                on_click=lambda e, u=url: open_image_preview(u) if open_image_preview else None,
+            )
 
-                img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-                img_src = f"data:image/jpeg;base64,{img_base64}"
+            def on_error(e):
+                img.visible = False
+                fallback.visible = True
+                img.update()
+                fallback.update()
 
-                img = ft.Image(
-                    src=img_src,
-                    width=250,
-                    height=250,
-                    fit="contain",
-                )
+            img.on_error = on_error
 
-                if open_image_preview:
-                    elements.append(
-                        ft.GestureDetector(
-                            content=img,
-                            on_tap=lambda e, u=img_src: open_image_preview(u),
-                        )
+            content = ft.Stack([img, fallback])
+
+            if open_image_preview:
+                elements.append(
+                    ft.GestureDetector(
+                        content=content,
+                        on_tap=lambda e, u=url: open_image_preview(u),
                     )
-                else:
-                    elements.append(img)
-
-            except Exception as ex:
-                print("PHOTO LOAD ERROR:", ex)
-                elements.append(ft.Text("🖼 Ошибка загрузки", size=13))
+                )
+            else:
+                elements.append(content)
 
         else:
             elements.append(
                 ft.TextButton(
-                    "🖼 Открыть скрин",
-                    on_click=lambda e, u=url: open_image_preview(u)
+                    "🖼 Открыть фото",
+                    on_click=lambda e, u=url: open_image_preview(u) if open_image_preview else None,
                 )
             )
 
