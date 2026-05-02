@@ -1,6 +1,7 @@
 crm/crm.db
 crm/.env
 crm/venv/
+*.db
 __pycache__/
 *.pyc
 .env
