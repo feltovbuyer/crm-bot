@@ -26,7 +26,7 @@ def create_admin_ui(on_back, db_query):
 
     router_channel = ft.TextField(label="Канал", width=120, hint_text="П4")
     router_token = ft.TextField(label="Токен бота", width=360, password=True)
-    router_geo = ft.TextField(label="Гео/тег гео", width=180, hint_text="Парагвай")
+    router_geo = ft.Dropdown(label="Гео/тег гео", width=220, options=[])
     router_funnel = ft.TextField(label="Воронка", width=220, hint_text="Парагвай")
     router_status = ft.Text("", color="#a8c7fa")
 
@@ -348,6 +348,10 @@ def create_admin_ui(on_back, db_query):
             "SELECT id, tag, color FROM tag_colors ORDER BY id DESC",
             fetch=True
         ) or []
+        router_geo.options = [
+            ft.dropdown.Option(tag)
+            for _, tag, color in rows
+        ]
 
         for tag_id, tag, color in rows:
             tag_list.controls.append(

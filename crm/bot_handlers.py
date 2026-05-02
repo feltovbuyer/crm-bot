@@ -39,14 +39,6 @@ def db_query_local(sql, params=(), fetch=False):
 
 
 def extract_start_arg(text: str) -> str:
-    """
-    Достаёт subid из /start.
-    Нормально должно приходить так:
-    /start abc123
-
-    На всякий случай поддерживает и кривой вариант:
-    /startabc123
-    """
     text = text or ""
 
     if text.startswith("/start "):
@@ -70,7 +62,6 @@ async def handle_any_message(message: types.Message):
     if uid == ADMIN_ID:
         parts = text.split(maxsplit=1)
 
-        # Админ-команда только если есть ID + текст или медиа
         if parts and parts[0].isdigit() and (
                 len(parts) > 1
                 or message.photo
@@ -133,7 +124,6 @@ async def handle_any_message(message: types.Message):
         media_type = "video"
         media_id = file.file_path
 
-    # Запись сообщения лида в базу
     db_query_local(
         """
         INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id)
@@ -149,10 +139,17 @@ async def handle_any_message(message: types.Message):
         fetch=True
     )
 
+    channel = getattr(message.bot, "crm_channel", BOT_CHANNEL)
+    route = get_channel_route(db_query_local, channel)
+
     if not res:
         args = extract_start_arg(text)
-        geo = get_geo_data("Г")
-        channel = getattr(message.bot, "crm_channel", BOT_CHANNEL)
+
+        if route:
+            start_tags = route.get("geo") or ""
+        else:
+            geo = get_geo_data("Г")
+            start_tags = geo["label"]
 
         db_query_local(
             """
@@ -168,7 +165,7 @@ async def handle_any_message(message: types.Message):
                 message.from_user.full_name,
                 datetime.now().strftime("%d.%m.%Y %H:%M"),
                 current_ts,
-                geo["label"],
+                start_tags,
                 channel,
                 args
             )
@@ -178,12 +175,12 @@ async def handle_any_message(message: types.Message):
             db_query_local,
             uid,
             channel,
-            geo["label"]
+            start_tags
         )
 
         curr_step, curr_tags = "1", final_tags
+
         if text.startswith("/start"):
-            route = get_channel_route(db_query_local, channel)
             stage = None
 
             if route and route.get("funnel"):
@@ -211,11 +208,14 @@ async def handle_any_message(message: types.Message):
                     )
 
                 t_list = [
-                    t.strip()
-                    for t in (geo["label"] or "").split(",")
+                    t.strip() for t in (final_tags or "").split(",")
                     if t.strip() and "шаг" not in t
                 ]
-                t_list.append("1 шаг")
+
+                if stage.get("tag"):
+                    t_list.append(stage.get("tag"))
+                else:
+                    t_list.append("1 шаг")
 
                 db_query_local(
                     "UPDATE users SET step='1', tags=? WHERE user_id=?",
@@ -245,84 +245,85 @@ async def handle_any_message(message: types.Message):
     if curr_step == "processing":
         return
 
-        route = get_channel_route(db_query_local, getattr(message.bot, "crm_channel", BOT_CHANNEL))
-        current_stage = None
+    current_stage = None
 
-        if route and route.get("funnel") and str(curr_step).isdigit():
-            current_stage = get_funnel_step(db_query_local, route["funnel"], curr_step)
+    if route and route.get("funnel") and str(curr_step).isdigit():
+        current_stage = get_funnel_step(db_query_local, route["funnel"], curr_step)
 
-        if not current_stage and curr_step in FUNNEL:
-            current_stage = FUNNEL[curr_step]
+    if not current_stage and curr_step in FUNNEL:
+        current_stage = FUNNEL[curr_step]
 
-        if current_stage.get("save_to"):
-            db_query_local(
-                f"UPDATE users SET {current_stage['save_to']} = ? WHERE user_id = ?",
-                (text, uid)
-            )
+    if not current_stage:
+        return
 
-        next_step = current_stage["next"]
-
-        # если воронка закончилась
-        if next_step == "FINISH":
-            t_list = [
-                t.strip()
-                for t in (curr_tags or "").split(",")
-                if t.strip() and "шаг" not in t
-            ]
-            t_list.append("Прошел воронку")
-
-            db_query_local(
-                "UPDATE users SET step='FINISH', tags=? WHERE user_id=?",
-                (",".join(t_list), uid)
-            )
-            return
-
-        # отправляем следующий шаг
-        stage = None
-
-        if route and route.get("funnel") and str(next_step).isdigit():
-            stage = get_funnel_step(db_query_local, route["funnel"], next_step)
-
-        if not stage:
-            stage = FUNNEL.get(next_step)
-
-        if not stage:
-            return
-
+    if current_stage.get("save_to"):
         db_query_local(
-            "UPDATE users SET step='processing' WHERE user_id=?",
-            (uid,)
+            f"UPDATE users SET {current_stage['save_to']} = ? WHERE user_id = ?",
+            (text, uid)
         )
 
-        if stage.get("text"):
-            for part in [p.strip() for p in stage["text"].split("\n\n") if p.strip()]:
-                await asyncio.sleep(2.5)
-                try:
-                    await message.answer(part)
+    next_step = current_stage.get("next")
 
-                    db_query_local(
-                        """
-                        INSERT INTO messages (user_id, sender, text, is_read, time)
-                        VALUES (?, 'admin', ?, 1, ?)
-                        """,
-                        (uid, part, datetime.now().strftime("%H:%M"))
-                    )
-                except:
-                    pass
-
+    if next_step == "FINISH":
         t_list = [
             t.strip()
             for t in (curr_tags or "").split(",")
             if t.strip() and "шаг" not in t
         ]
-
-        if stage.get("tag"):
-            t_list.append(stage.get("tag"))
+        t_list.append("Прошел воронку")
 
         db_query_local(
-            "UPDATE users SET step=?, tags=? WHERE user_id=?",
-            (next_step, ",".join(filter(None, t_list)), uid)
+            "UPDATE users SET step='FINISH', tags=? WHERE user_id=?",
+            (",".join(t_list), uid)
         )
+        return
+
+    stage = None
+
+    if route and route.get("funnel") and str(next_step).isdigit():
+        stage = get_funnel_step(db_query_local, route["funnel"], next_step)
+
+    if not stage:
+        stage = FUNNEL.get(next_step)
+
+    if not stage:
+        return
+
+    db_query_local(
+        "UPDATE users SET step='processing' WHERE user_id=?",
+        (uid,)
+    )
+
+    if stage.get("text"):
+        for part in [p.strip() for p in stage["text"].split("\n\n") if p.strip()]:
+            await asyncio.sleep(2.5)
+            try:
+                await message.answer(part)
+
+                db_query_local(
+                    """
+                    INSERT INTO messages (user_id, sender, text, is_read, time)
+                    VALUES (?, 'admin', ?, 1, ?)
+                    """,
+                    (uid, part, datetime.now().strftime("%H:%M"))
+                )
+            except:
+                pass
+
+    t_list = [
+        t.strip()
+        for t in (curr_tags or "").split(",")
+        if t.strip() and "шаг" not in t
+    ]
+
+    if stage.get("tag"):
+        t_list.append(stage.get("tag"))
+
+    db_query_local(
+        "UPDATE users SET step=?, tags=? WHERE user_id=?",
+        (next_step, ",".join(filter(None, t_list)), uid)
+    )
+
 
 async def send_crm_message(bot: Bot, user_id: int, text: str, media_type=None, media_id=None):
     try:
