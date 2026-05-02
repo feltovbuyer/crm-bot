@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher, types
 from filescrm import build_message_content
 from admin_panel import create_admin_ui
 import uuid
+
 from utils import get_geo_data
 from aiogram.exceptions import TelegramForbiddenError
 
@@ -25,7 +26,7 @@ from authadmin import open_admin_login
 
 # Импортируем твои компоненты и логику из внешних файлов
 from ui_components import create_lead_card, create_broadcast_ui
-from auto_push import start_scheduler
+from auto_push import start_scheduler, create_push_tasks_for_tag
 from left_panel import update_left_panel
 from keitaro_tracker import start_keitaro_server
 from bot_handlers import router as bot_router, send_crm_message  # Подключаем новый хендлер
@@ -107,20 +108,25 @@ def get_bot_for_user(user_id):
 async def show_crm(page: ft.Page):
     selected_file = {"path": None, "name": None, "uploading": False}
     selected_file_label = ft.Text("", size=12, color="#a2c7f5")
+
     file_picker = ft.FilePicker()
     page.services.append(file_picker)
 
     async def pick_file(e):
-        print("PICK FILE CLICK")
-        await file_picker.pick_files(allow_multiple=False)
+        print("СКРЕПКА НАЖАТА")
 
-    def on_file_result(e):
-        print("FILE RESULT:", e.files)
+        files = await file_picker.pick_files(allow_multiple=False)
 
-        if not e.files:
+        print("FILES:", files)
+
+        if not files:
+            selected_file_label.value = "Файл не выбран"
+            page.update()
             return
 
-        f = e.files[0]
+        f = files[0]
+        print("SELECTED:", f.name)
+
         ext = os.path.splitext(f.name)[1].lower()
         server_name = f"{uuid.uuid4().hex}{ext}"
         server_path = os.path.join(UPLOAD_DIR, server_name)
@@ -129,20 +135,25 @@ async def show_crm(page: ft.Page):
         selected_file["name"] = f.name
         selected_file["uploading"] = True
 
-        selected_file_label.value = f"⏳ Загружаю {f.name}..."
+        selected_file_label.value = f"⏳ Загружаю: {f.name}"
+        clear_btn.visible = False
         page.update()
 
         upload_url = page.get_upload_url(server_name, 600)
+        print("UPLOAD URL:", upload_url)
 
-        page.run_task(
-            file_picker.upload,
-            [
-                ft.FilePickerUploadFile(
-                    name=f.name,
-                    upload_url=upload_url
-                )
-            ]
-        )
+        await file_picker.upload([
+            ft.FilePickerUploadFile(
+                name=f.name,
+                upload_url=upload_url,
+            )
+        ])
+
+        selected_file["uploading"] = False
+        selected_file_label.value = f"✅ Прикреплён: {f.name}"
+        clear_btn.visible = True
+        page.update()
+
 
     def on_upload(e):
         print("UPLOAD EVENT:", e.progress)
@@ -151,6 +162,11 @@ async def show_crm(page: ft.Page):
             selected_file_label.value = f"⏳ Загрузка... {int(e.progress * 100)}%"
             page.update()
             return
+
+
+        async def pick_file(e):
+            print("СКРЕПКА НАЖАТА")
+            await file_picker.pick_files(allow_multiple=False)
 
         selected_file["uploading"] = False
 
@@ -170,8 +186,7 @@ async def show_crm(page: ft.Page):
         clear_btn.visible = True
         page.update()
 
-    file_picker.on_result = on_file_result
-    file_picker.on_upload = on_upload
+
     page.title = "Adeola CRM PRO"
     page.theme_mode = ft.ThemeMode.DARK
     page.window_width = 1450
@@ -231,6 +246,11 @@ async def show_crm(page: ft.Page):
                 if t not in tags:
                     tags.append(t)
                     db_query("UPDATE users SET tags=? WHERE user_id=?", (",".join(tags), state["active_id"]))
+
+                    create_push_tasks_for_tag(
+                        user_id=state["active_id"],
+                        tag=t
+                    )
             dlg.open = False
             page.run_task(select_user, state["active_id"])
 
@@ -335,10 +355,20 @@ async def show_crm(page: ft.Page):
             ms = db_query(
                 "SELECT sender, text, time, media_type, media_id FROM messages WHERE user_id=? ORDER BY id ASC",
                           (state["active_id"],), fetch=True)
+            # берём только фото
+            photo_messages = [m for m in ms if m[3] == "photo"]
+
+            # последние 25 фото будут видны
+            visible_photo_ids = set(id(m) for m in photo_messages[-25:])
 
             chat_col.controls = []
             for m in ms:
                 m_sender, m_text, m_time, m_type, m_media_id = m
+
+                show_preview = True
+
+                if m_type == "photo" and id(m) not in visible_photo_ids:
+                    show_preview = False
 
                 # Логика заглушек для медиа в чате CRM
                 if not m_text and m_type:
@@ -359,7 +389,8 @@ async def show_crm(page: ft.Page):
                         m_type,
                         get_bot_for_user(state["active_id"]).token,
                         m_media_id,
-                        open_image_preview
+                        open_image_preview,
+                        show_preview=show_preview
                     )
                 )
             db_query("UPDATE messages SET is_read=1 WHERE user_id=? AND sender='user'", (state["active_id"],))
@@ -370,18 +401,27 @@ async def show_crm(page: ft.Page):
 
     # Отправка сообщения админом
     async def send_m(e=None):
-        clear_btn.visible = True
-        clear_btn.visible = False
         if not state["active_id"]:
-            return
+                return
 
         txt = msg_in.value or ""
+
+            # сначала проверяем, не грузится ли файл
+        if selected_file.get("uploading"):
+                selected_file_label.value = "⏳ Файл ещё загружается..."
+                page.update()
+                return
+
         file_path = selected_file.get("path")
         file_name = selected_file.get("name")
-        if selected_file.get("uploading"):
-            selected_file_label.value = "⏳ Файл ещё загружается..."
-            page.update()
-            return
+
+            # сразу очищаем выбранный файл, чтобы он не отправился повторно
+        selected_file["path"] = None
+        selected_file["name"] = None
+        selected_file["uploading"] = False
+        selected_file_label.value = ""
+        clear_btn.visible = False
+        page.update()
 
 
         if not txt and not file_path:
@@ -638,6 +678,7 @@ async def show_crm(page: ft.Page):
     multi_dp.include_router(bot_router)
 
     asyncio.create_task(multi_dp.start_polling(*polling_bots))
+    asyncio.create_task(start_scheduler(get_bot_for_user))
 
     asyncio.create_task(start_keitaro_server(db_query, port=8080))
 

@@ -3,3 +3,4 @@ crm/.env
 crm/venv/
 __pycache__/
 *.pyc
+.env
