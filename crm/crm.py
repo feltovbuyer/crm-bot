@@ -199,6 +199,7 @@ async def show_crm(page: ft.Page):
         "search_tag": "",
         "chat_limit": 20,
         "is_loading_more": False,
+        "scroll_restore": None,
     }
 
 
@@ -423,24 +424,30 @@ async def show_crm(page: ft.Page):
             page.update()
             await asyncio.sleep(0.1)
 
-            if not state.get("is_loading_more"):
+            if state.get("is_loading_more") and state.get("scroll_restore") is not None:
+                await chat_col.scroll_to(
+                    offset=state["scroll_restore"],
+                    duration=0
+                )
+                state["scroll_restore"] = None
+
+            elif not state.get("is_loading_more"):
                 await chat_col.scroll_to(offset=-1, duration=200)
 
     async def on_chat_scroll(e):
-        # уже грузим → выходим
         if state.get("is_loading_more"):
             return
 
-        # почти вверху
-        if e.pixels <= 50 and not state.get("is_loading_more"):
+        if e.pixels <= 50:
             state["is_loading_more"] = True
 
-            old_limit = state["chat_limit"]
+            # запоминаем где ты был
+            state["scroll_restore"] = e.pixels + 600
+            # МЕНЯТЬ ЗНАЧНИЕ 400 800
+
             state["chat_limit"] += 20
 
-            # защита от лишних перезагрузок
-            if state["chat_limit"] != old_limit:
-                await refresh_c(force=True)
+            await refresh_c(force=True)
 
             state["is_loading_more"] = False
 
@@ -569,47 +576,45 @@ async def show_crm(page: ft.Page):
     # Инициализация интерфейса
     ui, br_ui = create_lead_card(), create_broadcast_ui()
 
-    def pick_broadcast_file(e):
-        on_click = lambda e: print("FilePicker отключён на VPS")
+    async def pick_broadcast_file(e):
+        print("СКРЕПКА РАССЫЛКИ НАЖАТА")
 
-    br_ui["file_btn"].on_click = pick_broadcast_file
-    async def on_broadcast_start(e):
-        if not br_ui["input"].value:
-            br_ui["status"].value = "⚠️ Введите текст!"
+        files = await file_picker.pick_files(allow_multiple=False)
+
+        print("BROADCAST FILES:", files)
+
+        if not files:
+            br_ui["file_label"].value = "Файл не выбран"
+            br_ui["file_path"] = None
             page.update()
             return
 
+        f = files[0]
 
+        ext = os.path.splitext(f.name)[1].lower()
+        server_name = f"broadcast_{uuid.uuid4().hex}{ext}"
+        server_path = os.path.join(UPLOAD_DIR, server_name)
 
-        br_ui["status"].value = "🚀 Рассылка запущена..."
+        br_ui["file_label"].value = f"⏳ Загружаю: {f.name}"
+        br_ui["file_path"] = None
         br_ui["btn"].disabled = True
         page.update()
 
-        # Функция для обновления прогресса на экране
-        async def update_status(current, total):
-            br_ui["status"].value = f"Отправлено: {current} / {total}"
-            page.update()
+        upload_url = page.get_upload_url(server_name, 600)
 
-        # Вызываем логику из файла
-        success_count = await run_broadcast(
-            bot=default_bot,
-            text=br_ui["input"].value,
-            progress_callback=update_status,
-            target_tag=br_ui["tag"].value,
-            target_date=br_ui["date"].value if br_ui["date"].value else None,
-            target_date_to=br_ui["date_to"].value if br_ui["date_to"].value else None,
-            file_path=br_ui["file_path"],
-            get_bot_for_user=get_bot_for_user
-        )
+        await file_picker.upload([
+            ft.FilePickerUploadFile(
+                name=f.name,
+                upload_url=upload_url,
+            )
+        ])
 
-        br_ui["status"].value = f"✅ Готово! Отправлено: {success_count}"
-        br_ui["file_path"] = None
-        br_ui["file_label"].value = ""
+        br_ui["file_path"] = server_path
+        br_ui["file_label"].value = f"✅ Прикреплён: {f.name}"
         br_ui["btn"].disabled = False
         page.update()
 
-    # ПРИВЯЗЫВАЕМ ФУНКЦИЮ К КНОПКЕ (Этого не было в твоем коде)
-    br_ui["btn"].on_click = on_broadcast_start
+    br_ui["file_btn"].on_click = pick_broadcast_file
     ui["save_btn"].on_click, ui["add_tag_btn"].on_click = save_data, show_tag_dialog
 
     user_list = ft.Column(

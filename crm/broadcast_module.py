@@ -45,16 +45,16 @@ async def run_broadcast(
     for (uid,) in users:
         target_bot = get_bot_for_user(uid) if get_bot_for_user else bot
 
-        try:
-            media_type = None
-            media_id = None
+        media_type = None
+        media_id = None
 
+        try:
             if file_path:
                 ext = os.path.splitext(file_path)[1].lower()
 
                 if ext in [".jpg", ".jpeg", ".png", ".webp"]:
                     sent = await target_bot.send_photo(
-                        chat_id=int(uid),
+                        uid,
                         photo=types.FSInputFile(file_path),
                         caption=text
                     )
@@ -62,9 +62,19 @@ async def run_broadcast(
                     media_type = "photo"
                     media_id = file.file_path
 
+                elif ext in [".ogg", ".oga"]:
+                    sent = await target_bot.send_voice(
+                        uid,
+                        voice=types.FSInputFile(file_path),
+                        caption=text
+                    )
+                    file = await target_bot.get_file(sent.voice.file_id)
+                    media_type = "voice"
+                    media_id = file.file_path
+
                 elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
                     sent = await target_bot.send_video(
-                        chat_id=int(uid),
+                        uid,
                         video=types.FSInputFile(file_path),
                         caption=text
                     )
@@ -74,7 +84,7 @@ async def run_broadcast(
 
                 else:
                     sent = await target_bot.send_document(
-                        chat_id=int(uid),
+                        uid,
                         document=types.FSInputFile(file_path),
                         caption=text
                     )
@@ -87,14 +97,17 @@ async def run_broadcast(
                     INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id)
                     VALUES (?, 'admin', ?, 1, ?, ?, ?)
                     """,
-                    (uid, text, now_t, media_type, media_id)
+                    (uid, text or "", now_t, media_type, media_id)
                 )
 
             else:
-                await target_bot.send_message(chat_id=int(uid), text=text)
+                await target_bot.send_message(uid, text)
 
                 cursor.execute(
-                    "INSERT INTO messages (user_id, sender, text, is_read, time) VALUES (?, 'admin', ?, 1, ?)",
+                    """
+                    INSERT INTO messages (user_id, sender, text, is_read, time)
+                    VALUES (?, 'admin', ?, 1, ?)
+                    """,
                     (uid, text, now_t)
                 )
 
