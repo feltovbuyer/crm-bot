@@ -418,11 +418,12 @@ async def show_crm(page: ft.Page):
                 new_controls.append(ctrl)
 
             if state.get("is_loading_more"):
-                old_len = len(chat_col.controls)
-                extra = len(new_controls) - old_len
+                # берём только новые старые сообщения (те что добавились сверху)
+                existing_count = len(chat_col.controls)
+                new_part = new_controls[:-existing_count] if existing_count else new_controls
 
-                if extra > 0:
-                    chat_col.controls = new_controls[:extra] + chat_col.controls
+                for ctrl in reversed(new_part):
+                    chat_col.controls.insert(0, ctrl)
             else:
                 chat_col.controls = new_controls
 
@@ -445,9 +446,6 @@ async def show_crm(page: ft.Page):
 
             state["chat_limit"] += 20
             await refresh_c(force=True)
-
-            await asyncio.sleep(0.05)
-            await chat_col.scroll_to(scroll_key=anchor_key, duration=0)
 
             state["is_loading_more"] = False
 
