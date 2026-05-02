@@ -199,7 +199,7 @@ async def show_crm(page: ft.Page):
         "search_tag": "",
         "chat_limit": 20,
         "is_loading_more": False,
-        "scroll_restore": None,
+        "scroll_to_bottom": False,
     }
 
 
@@ -285,6 +285,7 @@ async def show_crm(page: ft.Page):
         state["active_id"] = int(uid)
         state["last_count"] = 0
         state["chat_limit"] = 20
+        state["scroll_to_bottom"] = True
 
         db_query(
             "UPDATE messages SET is_read=1 WHERE user_id=? AND sender='user'",
@@ -432,19 +433,17 @@ async def show_crm(page: ft.Page):
                 state["scroll_restore"] = None
 
             elif not state.get("is_loading_more"):
-                await chat_col.scroll_to(offset=-1, duration=200)
+                if state.get("scroll_to_bottom"):
+                    await asyncio.sleep(0.1)
+                    await chat_col.scroll_to(offset=-1, duration=200)
+                    state["scroll_to_bottom"] = False
 
     async def on_chat_scroll(e):
         if state.get("is_loading_more"):
             return
 
-        if e.pixels <= 50:
+        if e.pixels <= 30:
             state["is_loading_more"] = True
-
-            # запоминаем где ты был
-            state["scroll_restore"] = e.pixels + 600
-            # МЕНЯТЬ ЗНАЧНИЕ 400 800
-
             state["chat_limit"] += 20
 
             await refresh_c(force=True)
@@ -615,6 +614,48 @@ async def show_crm(page: ft.Page):
         page.update()
 
     br_ui["file_btn"].on_click = pick_broadcast_file
+
+    async def on_broadcast_start(e):
+        if not br_ui["input"].value and not br_ui.get("file_path"):
+            br_ui["status"].value = "⚠️ Введите текст или прикрепите файл!"
+            page.update()
+            return
+
+        br_ui["status"].value = "🚀 Рассылка запущена..."
+        br_ui["btn"].disabled = True
+        page.update()
+
+        async def update_status(current, total):
+            br_ui["status"].value = f"Отправлено: {current} / {total}"
+            page.update()
+
+        old_file_path = br_ui.get("file_path")
+
+        success_count = await run_broadcast(
+            bot=default_bot,
+            text=br_ui["input"].value or "",
+            progress_callback=update_status,
+            target_tag=br_ui["tag"].value,
+            target_date=br_ui["date"].value if br_ui["date"].value else None,
+            target_date_to=br_ui["date_to"].value if br_ui["date_to"].value else None,
+            file_path=br_ui.get("file_path"),
+            get_bot_for_user=get_bot_for_user
+        )
+
+        br_ui["status"].value = f"✅ Готово! Отправлено: {success_count}"
+        br_ui["file_path"] = None
+        br_ui["file_label"].value = ""
+        br_ui["btn"].disabled = False
+
+        if old_file_path and os.path.exists(old_file_path):
+            try:
+                os.remove(old_file_path)
+            except Exception as ex:
+                print("BROADCAST TEMP FILE DELETE ERROR:", ex)
+
+        page.update()
+
+    br_ui["btn"].on_click = on_broadcast_start
     ui["save_btn"].on_click, ui["add_tag_btn"].on_click = save_data, show_tag_dialog
 
     user_list = ft.Column(
