@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
+ADMIN_ADMINOV = os.getenv("ADMIN_ADMINOV", "1234")
 
 
 def open_admin_login(page, on_success):
@@ -16,7 +16,7 @@ def open_admin_login(page, on_success):
     )
 
     def submit(e):
-        if pwd_input.value == ADMIN_PASSWORD:
+        if pwd_input.value == ADMIN_ADMINOV:
             dlg.open = False
             on_success()
             page.update()
