@@ -196,8 +196,11 @@ async def show_crm(page: ft.Page):
         "last_count": 0,
         "folder": "ФД",
         "search_text": "",
-        "search_tag": ""
+        "search_tag": "",
+        "chat_limit": 20,
+        "is_loading_more": False,
     }
+
 
     def clear_selected_file(e=None):
         if selected_file.get("path") and os.path.exists(selected_file["path"]):
@@ -276,16 +279,25 @@ async def show_crm(page: ft.Page):
         ui["save_btn"].text, ui["save_btn"].bgcolor = "Сохранить", None
         page.update()
 
-
-
-    # Выбор пользователя в левой панели
+        # Выбор пользователя в левой панели
     async def select_user(uid):
-        state["active_id"], state["last_count"] = int(uid), 0
-        db_query("UPDATE messages SET is_read=1 WHERE user_id=? AND sender='user'", (uid,))
+        state["active_id"] = int(uid)
+        state["last_count"] = 0
+        state["chat_limit"] = 20
+
+        db_query(
+            "UPDATE messages SET is_read=1 WHERE user_id=? AND sender='user'",
+            (uid,)
+        )
 
         r = db_query(
             "SELECT full_name, step1_ans, step2_ans, step3_ans, tags, created_at, comment, media FROM users WHERE user_id=?",
-            (uid,), fetch=True)
+            (uid,),
+            fetch=True
+        )
+
+        if r:
+                fn, s1, s2, s3, tags_raw, dt, comm, med = r[0]
 
         if r:
             fn, s1, s2, s3, tags_raw, dt, comm, med = r[0]
@@ -354,8 +366,20 @@ async def show_crm(page: ft.Page):
         if count != state["last_count"] or force:
             # ТЯНЕМ КОЛОНКУ media_type (msg[3])
             ms = db_query(
-                "SELECT sender, text, time, media_type, media_id FROM messages WHERE user_id=? ORDER BY id ASC",
-                          (state["active_id"],), fetch=True)
+                """
+                SELECT sender, text, time, media_type, media_id
+                FROM (
+                    SELECT id, sender, text, time, media_type, media_id
+                    FROM messages
+                    WHERE user_id=?
+                    ORDER BY id DESC
+                    LIMIT ?
+                )
+                ORDER BY id ASC
+                """,
+                (state["active_id"], state["chat_limit"]),
+                fetch=True
+            )
             # берём только фото
             photo_messages = [m for m in ms if m[3] == "photo"]
 
@@ -399,6 +423,18 @@ async def show_crm(page: ft.Page):
             page.update()
             await asyncio.sleep(0.1)
             await chat_col.scroll_to(offset=-1, duration=200)
+
+    async def on_chat_scroll(e):
+        if state.get("is_loading_more"):
+            return
+
+        if e.pixels <= 50:
+            state["is_loading_more"] = True
+            state["chat_limit"] += 20
+
+            await refresh_c(force=True)
+
+            state["is_loading_more"] = False
 
     # Отправка сообщения админом
     async def send_m(e=None):
@@ -559,7 +595,12 @@ async def show_crm(page: ft.Page):
     br_ui["btn"].on_click = on_broadcast_start
     ui["save_btn"].on_click, ui["add_tag_btn"].on_click = save_data, show_tag_dialog
 
-    user_list, chat_col = ft.Column(scroll="always", expand=True), ft.Column(scroll="always", expand=True, spacing=10)
+    user_list, chat_col = ft.Column(
+    scroll="always",
+    expand=True,
+    spacing=10,
+    on_scroll=on_chat_scroll
+)
     msg_in = ft.TextField(hint_text="Введите сообщение...", expand=True, on_submit=send_m, border_radius=10)
 
     clear_btn = ft.IconButton(
