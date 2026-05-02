@@ -338,11 +338,25 @@ async def show_crm(page: ft.Page):
             await refresh_c(force=True)
 
     def open_image_preview(url):
+        try:
+            import urllib.request
+            import base64
+
+            with urllib.request.urlopen(url, timeout=10) as response:
+                img_bytes = response.read()
+
+            img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+            img_src = f"data:image/jpeg;base64,{img_base64}"
+
+        except Exception as ex:
+            print("OPEN IMAGE ERROR:", ex)
+            img_src = url
+
         dlg = ft.AlertDialog(
             modal=True,
             content=ft.Container(
                 content=ft.Image(
-                    src=url,
+                    src=img_src,
                     width=700,
                     height=700,
                     fit="contain"
@@ -388,10 +402,8 @@ async def show_crm(page: ft.Page):
                 fetch=True
             )
             # берём только фото
-            photo_messages = [m for m in ms if m[3] == "photo"]
-
-            # последние 25 фото будут видны
-            visible_photo_ids = set(id(m) for m in photo_messages[-25:])
+            photo_messages = [m for m in ms if m[4] == "photo"]
+            visible_photo_ids = set(m[0] for m in photo_messages[-25:])
 
             new_controls = []
 
@@ -400,7 +412,7 @@ async def show_crm(page: ft.Page):
 
                 show_preview = True
 
-                if m_type == "photo" and id(m) not in visible_photo_ids:
+                if m_type == "photo" and m_id not in visible_photo_ids:
                     show_preview = False
 
                 ctrl = build_message_content(
