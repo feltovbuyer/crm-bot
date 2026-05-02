@@ -25,17 +25,24 @@ def build_message_content(
 
         def open_photo_as_base64(e, u=url):
             try:
+                print("OPEN PHOTO BUTTON CLICK:", u)
+
                 import urllib.request
                 import base64
 
                 with urllib.request.urlopen(u, timeout=15) as response:
                     img_bytes = response.read()
 
+                print("PHOTO BYTES:", len(img_bytes))
+
                 img_base64 = base64.b64encode(img_bytes).decode("utf-8")
                 img_src = f"data:image/jpeg;base64,{img_base64}"
 
                 if open_image_preview:
+                    print("CALL OPEN IMAGE PREVIEW")
                     open_image_preview(img_src)
+                else:
+                    print("NO OPEN IMAGE PREVIEW")
 
             except Exception as ex:
                 print("OPEN PHOTO BASE64 ERROR:", ex)
