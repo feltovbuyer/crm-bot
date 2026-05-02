@@ -22,46 +22,49 @@ def build_message_content(
     url = tg_file_url(bot_token, media_id)
 
     if m_type == "photo" and url:
+
         if show_preview:
-            img = ft.Image(
-                src=url,
-                width=250,
-                height=250,
-                fit="contain",
-                border_radius=8,
-            )
+            try:
+                import urllib.request
+                import base64
 
-            fallback = ft.TextButton(
-                "🖼 Открыть фото",
-                visible=False,
-                on_click=lambda e, u=url: open_image_preview(u) if open_image_preview else None,
-            )
+                with urllib.request.urlopen(url, timeout=10) as response:
+                    img_bytes = response.read()
 
-            def on_error(e):
-                img.visible = False
-                fallback.visible = True
-                img.update()
-                fallback.update()
+                img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+                img_src = f"data:image/jpeg;base64,{img_base64}"
 
-            img.on_error = on_error
+                img = ft.Image(
+                    src=img_src,
+                    width=250,
+                    height=250,
+                    fit="contain",
+                )
 
-            content = ft.Stack([img, fallback])
+                if open_image_preview:
+                    elements.append(
+                        ft.GestureDetector(
+                            content=img,
+                            on_tap=lambda e, u=url: open_image_preview(u),
+                        )
+                    )
+                else:
+                    elements.append(img)
 
-            if open_image_preview:
+            except Exception as ex:
+                print("PHOTO LOAD ERROR:", ex)
                 elements.append(
-                    ft.GestureDetector(
-                        content=content,
-                        on_tap=lambda e, u=url: open_image_preview(u),
+                    ft.TextButton(
+                        "🖼 Открыть фото",
+                        on_click=lambda e, u=url: open_image_preview(u) if open_image_preview else None
                     )
                 )
-            else:
-                elements.append(content)
 
         else:
             elements.append(
                 ft.TextButton(
                     "🖼 Открыть фото",
-                    on_click=lambda e, u=url: open_image_preview(u) if open_image_preview else None,
+                    on_click=lambda e, u=url: open_image_preview(u) if open_image_preview else None
                 )
             )
 
