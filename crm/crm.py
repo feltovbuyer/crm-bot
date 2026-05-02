@@ -230,13 +230,38 @@ async def show_crm(page: ft.Page):
                 db_query("UPDATE users SET tags=? WHERE user_id=?", (",".join(tags), state["active_id"]))
                 await select_user(state["active_id"])
 
-    def toggle_admin(s):
-        admin_view.visible = s
-        crm_view.visible = not s
-        br_ui["view"].visible = False
+    admin_view = create_admin_ui(lambda e: toggle_admin(False), db_query)
+
+    def close_image_preview(e, dlg):
+        dlg.open = False
         page.update()
 
-    admin_view = create_admin_ui(lambda e: toggle_admin(False), db_query)
+    def open_image_preview(src):
+        dlg = ft.AlertDialog(
+            modal=True,
+            content=ft.Container(
+                width=650,
+                height=500,
+                bgcolor="#0e1621",
+                alignment=ft.alignment.center,
+                content=ft.Image(
+                    src=src,
+                    width=620,
+                    height=470,
+                    fit="contain",
+                ),
+            ),
+            actions=[
+                ft.TextButton(
+                    "Закрыть",
+                    on_click=lambda e: close_image_preview(e, dlg)
+                )
+            ],
+        )
+
+        page.overlay.append(dlg)
+        dlg.open = True
+        page.update()
 
     # Окно выбора статуса (тега)
     async def show_tag_dialog(e):
@@ -333,48 +358,6 @@ async def show_crm(page: ft.Page):
             update_left_panel(user_list, db_query, state, page, select_user)
             await refresh_c(force=True)
 
-    def open_image_preview(url):
-        try:
-            import urllib.request
-            import base64
-
-            with urllib.request.urlopen(url, timeout=10) as response:
-                img_bytes = response.read()
-
-            img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-            img_src = f"data:image/jpeg;base64,{img_base64}"
-
-        except Exception as ex:
-            print("OPEN IMAGE ERROR:", ex)
-            img_src = url
-
-        dlg = ft.AlertDialog(
-            modal=True,
-            content=ft.Container(
-                content=ft.Image(
-                    src=img_src,
-                    width=700,
-                    height=700,
-                    fit="contain"
-                ),
-                padding=10
-            ),
-            actions=[
-                ft.TextButton(
-                    "Закрыть",
-                    on_click=lambda e: close_image_preview(dlg)
-                )
-            ]
-        )
-
-        page.overlay.append(dlg)
-        dlg.open = True
-        page.update()
-
-    def close_image_preview(dlg):
-        dlg.open = False
-        page.update()
-
     # Обновление чата
     async def refresh_c(force=False):
         if not state["active_id"]: return
@@ -399,7 +382,7 @@ async def show_crm(page: ft.Page):
             )
             # берём только фото
             photo_messages = [m for m in ms if m[4] == "photo"]
-            visible_photo_ids = set(m[0] for m in photo_messages[-1:])
+            visible_photo_ids = set(m[0] for m in photo_messages[-2:])
 
             new_controls = []
 
