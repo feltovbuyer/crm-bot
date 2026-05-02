@@ -1,5 +1,6 @@
 import os
 import flet as ft
+import sqlite3
 import crm
 import os
 from dotenv import load_dotenv
@@ -36,7 +37,9 @@ async def main(page: ft.Page):
     error_text = ft.Text("", color="red")
 
     async def login_click(e):
-        if login_field.value == USER_LOGIN and pass_field.value == USER_PASS:
+        staff_user = check_staff_login(login_field.value, pass_field.value)
+
+        if staff_user or (login_field.value == USER_LOGIN and pass_field.value == USER_PASS):
             page.controls.clear()
             page.update()
             await crm.show_crm(page)
@@ -71,6 +74,29 @@ async def main(page: ft.Page):
         )
     )
     page.update()
+
+    def check_staff_login(login, password):
+        conn = sqlite3.connect("crm.db")
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS staff (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                login TEXT UNIQUE,
+                password TEXT,
+                role TEXT DEFAULT 'manager',
+                active INTEGER DEFAULT 1
+            )
+        """)
+
+        cursor.execute(
+            "SELECT id, role FROM staff WHERE login=? AND password=? AND active=1",
+            (login, password)
+        )
+
+        user = cursor.fetchone()
+        conn.close()
+        return user
 
 
 if __name__ == "__main__":

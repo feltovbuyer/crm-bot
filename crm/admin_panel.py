@@ -113,6 +113,77 @@ def create_admin_ui(on_back, db_query):
 
     load_pushes()
 
+    staff_login = ft.TextField(label="Логин менеджера", width=250)
+    staff_password = ft.TextField(label="Пароль", width=250)
+    staff_status = ft.Text("", color="#a8c7fa")
+    staff_list = ft.Column(spacing=8)
+
+    db_query("""
+        CREATE TABLE IF NOT EXISTS staff (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            login TEXT UNIQUE,
+            password TEXT,
+            role TEXT DEFAULT 'manager',
+            active INTEGER DEFAULT 1
+        )
+    """)
+
+    def load_staff():
+        staff_list.controls.clear()
+
+        rows = db_query(
+            "SELECT id, login, role, active FROM staff ORDER BY id DESC",
+            fetch=True
+        ) or []
+
+        for staff_id, login, role, active in rows:
+            staff_list.controls.append(
+                ft.Container(
+                    bgcolor="#17212b",
+                    border_radius=10,
+                    padding=10,
+                    content=ft.Row([
+                        ft.Text(f"{login} | {role} | {'активен' if active else 'выключен'}", expand=True),
+                        ft.TextButton(
+                            "Удалить",
+                            on_click=lambda e, sid=staff_id: delete_staff(sid)
+                        )
+                    ])
+                )
+            )
+
+    def add_staff(e):
+        login = (staff_login.value or "").strip()
+        password = (staff_password.value or "").strip()
+
+        if not login or not password:
+            staff_status.value = "⚠️ Введи логин и пароль"
+            e.page.update()
+            return
+
+        try:
+            db_query(
+                "INSERT INTO staff (login, password, role, active) VALUES (?, ?, 'manager', 1)",
+                (login, password)
+            )
+
+            staff_status.value = "✅ Аккаунт создан"
+            staff_login.value = ""
+            staff_password.value = ""
+
+            load_staff()
+            e.page.update()
+
+        except Exception as ex:
+            staff_status.value = f"❌ Ошибка: {ex}"
+            e.page.update()
+
+    def delete_staff(staff_id):
+        db_query("DELETE FROM staff WHERE id=?", (staff_id,))
+        load_staff()
+
+    load_staff()
+
     return ft.Container(
         visible=False,
         expand=True,
@@ -165,6 +236,25 @@ def create_admin_ui(on_back, db_query):
 
             ft.Text("Активные автопуши", size=16, weight="bold"),
             push_list,
+            ft.Divider(),
+
+            ft.Text("Аккаунты менеджеров", size=20, weight="bold"),
+            ft.Text("Создай логин/пароль для входа в CRM", color="#707579"),
+
+            ft.Row([
+                staff_login,
+                staff_password,
+            ]),
+
+            ft.FilledButton(
+                "Создать аккаунт",
+                on_click=add_staff
+            ),
+
+            staff_status,
+
+            ft.Text("Список аккаунтов", size=16, weight="bold"),
+            staff_list,
 
             ft.Text("Позже сюда добавим пуши, рассылки и авто-теги", color="#707579")
         ])
