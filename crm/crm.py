@@ -374,7 +374,7 @@ async def show_crm(page: ft.Page):
             # ТЯНЕМ КОЛОНКУ media_type (msg[3])
             ms = db_query(
                 """
-                SELECT sender, text, time, media_type, media_id
+                SELECT id, sender, text, time, media_type, media_id
                 FROM (
                     SELECT id, sender, text, time, media_type, media_id
                     FROM messages
@@ -396,25 +396,26 @@ async def show_crm(page: ft.Page):
             new_controls = []
 
             for m in ms:
-                m_sender, m_text, m_time, m_type, m_media_id = m
+                m_id, m_sender, m_text, m_time, m_type, m_media_id = m
 
                 show_preview = True
 
                 if m_type == "photo" and id(m) not in visible_photo_ids:
                     show_preview = False
 
-                new_controls.append(
-                    build_message_content(
-                        m_sender,
-                        m_text,
-                        m_time,
-                        m_type,
-                        get_bot_for_user(state["active_id"]).token,
-                        m_media_id,
-                        open_image_preview,
-                        show_preview=show_preview
-                    )
+                ctrl = build_message_content(
+                    m_sender,
+                    m_text,
+                    m_time,
+                    m_type,
+                    get_bot_for_user(state["active_id"]).token,
+                    m_media_id,
+                    open_image_preview,
+                    show_preview=show_preview
                 )
+
+                ctrl.key = f"msg_{m_id}"
+                new_controls.append(ctrl)
 
             if state.get("is_loading_more"):
                 old_len = len(chat_col.controls)
@@ -436,14 +437,16 @@ async def show_crm(page: ft.Page):
         if state.get("is_loading_more"):
             return
 
-        state["last_scroll"] = e.pixels
-
-        # дошёл до верха — догружаем
-        if e.pixels <= 30:
+        if e.pixels <= 30 and chat_col.controls:
             state["is_loading_more"] = True
-            state["chat_limit"] += 20
 
+            anchor_key = chat_col.controls[0].key
+
+            state["chat_limit"] += 20
             await refresh_c(force=True)
+
+            await asyncio.sleep(0.05)
+            await chat_col.scroll_to(scroll_key=anchor_key, duration=0)
 
             state["is_loading_more"] = False
 
