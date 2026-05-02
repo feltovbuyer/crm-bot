@@ -14,16 +14,9 @@ def create_admin_ui(on_back, db_query):
 
     push_tag = ft.TextField(label="Тег", width=250, hint_text="Например: РД")
     push_delay = ft.TextField(label="Задержка в минутах", width=250, value="15")
-    push_text = ft.TextField(
-        label="Текст автопуша",
-        width=500,
-        multiline=True,
-        min_lines=3,
-        max_lines=5
-    )
+    push_text = ft.TextField(label="Текст автопуша", width=500, multiline=True, min_lines=3, max_lines=5)
     push_status = ft.Text("", color="#a8c7fa")
     push_filter = ft.TextField(label="Фильтр по тегу", width=250, hint_text="Например: РД")
-
     push_list = ft.ListView(expand=True, spacing=8, auto_scroll=False)
 
     staff_login = ft.TextField(label="Логин менеджера", width=250)
@@ -31,10 +24,10 @@ def create_admin_ui(on_back, db_query):
     staff_status = ft.Text("", color="#a8c7fa")
     staff_list = ft.Column(spacing=8)
 
-    router_channel = ft.TextField(label="Канал", width=120, hint_text="Г3")
+    router_channel = ft.TextField(label="Канал", width=120, hint_text="П4")
     router_token = ft.TextField(label="Токен бота", width=360, password=True)
-    router_geo = ft.TextField(label="Гео/тег гео", width=180, hint_text="DE")
-    router_funnel = ft.TextField(label="Воронка", width=220, hint_text="DE funnel")
+    router_geo = ft.TextField(label="Гео/тег гео", width=180, hint_text="Парагвай")
+    router_funnel = ft.TextField(label="Воронка", width=220, hint_text="Парагвай")
     router_status = ft.Text("", color="#a8c7fa")
 
     router_channels_list = ft.Column(spacing=8)
@@ -43,7 +36,18 @@ def create_admin_ui(on_back, db_query):
     router_channel_dd = ft.Dropdown(label="Канал", width=220, options=[])
     router_staff_dd = ft.Dropdown(label="Менеджер", width=220, options=[])
     router_percent = ft.TextField(label="%", width=90, value="100")
-    router_manager_tag = ft.TextField(label="Тег менеджера", width=180, hint_text="123")
+    router_manager_tag = ft.TextField(label="Тег менеджера", width=180, hint_text="135")
+
+    funnel_name = ft.TextField(label="Название воронки", width=180, hint_text="Парагвай")
+    funnel_step = ft.TextField(label="Шаг", width=80, value="1")
+    funnel_tag = ft.TextField(label="Тег шага", width=160, hint_text="1 шаг")
+    funnel_next = ft.TextField(label="Следующий шаг", width=140, hint_text="2 или FINISH")
+    funnel_text = ft.TextField(label="Текст шага", width=520, multiline=True, min_lines=2, max_lines=5)
+    funnel_steps_list = ft.Column(spacing=8)
+
+    tag_name = ft.TextField(label="Тег", width=180, hint_text="Парагвай")
+    tag_color = ft.TextField(label="Цвет", width=160, hint_text="#2196F3")
+    tag_list = ft.Column(spacing=8)
 
     main_content = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
     pushes_content = ft.Column(expand=True)
@@ -72,35 +76,26 @@ def create_admin_ui(on_back, db_query):
         deps_text.value = str(db_query("SELECT COUNT(*) FROM users WHERE tags LIKE '%Депозит%'", fetch=True)[0][0])
         blocked_text.value = str(db_query("SELECT COUNT(*) FROM users WHERE is_blocked=1", fetch=True)[0][0])
         broadcasts_text.value = str(db_query("SELECT COUNT(*) FROM messages WHERE sender='admin'", fetch=True)[0][0])
-
         if e:
             e.page.update()
 
     def load_pushes(e=None):
         push_list.controls.clear()
-
         filter_tag = (push_filter.value or "").strip()
 
         if filter_tag:
-            rows = db_query(
-                """
+            rows = db_query("""
                 SELECT id, tag, text, delay_minutes, enabled
                 FROM auto_push_rules
                 WHERE tag LIKE ?
                 ORDER BY id DESC
-                """,
-                (f"%{filter_tag}%",),
-                fetch=True
-            ) or []
+            """, (f"%{filter_tag}%",), fetch=True) or []
         else:
-            rows = db_query(
-                """
+            rows = db_query("""
                 SELECT id, tag, text, delay_minutes, enabled
                 FROM auto_push_rules
                 ORDER BY id DESC
-                """,
-                fetch=True
-            ) or []
+            """, fetch=True) or []
 
         for rule_id, tag, text, delay, enabled in rows:
             preview = text[:120] + ("..." if len(text) > 120 else "")
@@ -110,19 +105,13 @@ def create_admin_ui(on_back, db_query):
                     bgcolor="#17212b",
                     border_radius=10,
                     padding=10,
-                    content=ft.Row(
-                        [
-                            ft.Text(tag or "-", width=150, weight="bold"),
-                            ft.Text(f"{delay} мин", width=100),
-                            ft.Text(preview, expand=True, size=13),
-                            ft.Text("Вкл" if enabled else "Выкл", width=60),
-                            ft.TextButton(
-                                "Удалить",
-                                on_click=lambda e, rid=rule_id: delete_push(rid)
-                            ),
-                        ],
-                        vertical_alignment=ft.CrossAxisAlignment.START,
-                    ),
+                    content=ft.Row([
+                        ft.Text(tag or "-", width=150, weight="bold"),
+                        ft.Text(f"{delay} мин", width=100),
+                        ft.Text(preview, expand=True, size=13),
+                        ft.Text("Вкл" if enabled else "Выкл", width=60),
+                        ft.TextButton("Удалить", on_click=lambda e, rid=rule_id: delete_push(rid)),
+                    ])
                 )
             )
 
@@ -143,13 +132,10 @@ def create_admin_ui(on_back, db_query):
             e.page.update()
             return
 
-        db_query(
-            """
+        db_query("""
             INSERT INTO auto_push_rules (tag, text, delay_minutes, enabled)
             VALUES (?, ?, ?, 1)
-            """,
-            (tag, text, delay)
-        )
+        """, (tag, text, delay))
 
         push_status.value = "✅ Автопуш добавлен"
         push_tag.value = ""
@@ -178,14 +164,8 @@ def create_admin_ui(on_back, db_query):
                     border_radius=10,
                     padding=10,
                     content=ft.Row([
-                        ft.Text(
-                            f"{login} | {role} | {'активен' if active else 'выключен'}",
-                            expand=True
-                        ),
-                        ft.TextButton(
-                            "Удалить",
-                            on_click=lambda e, sid=staff_id: delete_staff(sid)
-                        )
+                        ft.Text(f"{login} | {role} | {'активен' if active else 'выключен'}", expand=True),
+                        ft.TextButton("Удалить", on_click=lambda e, sid=staff_id: delete_staff(sid))
                     ])
                 )
             )
@@ -230,14 +210,11 @@ def create_admin_ui(on_back, db_query):
         router_channels_list.controls.clear()
         router_rules_list.controls.clear()
 
-        channels = db_query(
-            """
+        channels = db_query("""
             SELECT id, channel, geo, funnel, active
             FROM traffic_channels
             ORDER BY id DESC
-            """,
-            fetch=True
-        ) or []
+        """, fetch=True) or []
 
         router_channel_dd.options = [
             ft.dropdown.Option(str(cid), f"{channel} | {geo} | {funnel}")
@@ -262,28 +239,19 @@ def create_admin_ui(on_back, db_query):
                     border_radius=10,
                     padding=10,
                     content=ft.Row([
-                        ft.Text(
-                            f"{channel} | {geo} | {funnel} | {'вкл' if active else 'выкл'}",
-                            expand=True
-                        ),
-                        ft.TextButton(
-                            "Удалить",
-                            on_click=lambda e, x=cid: delete_router_channel(x)
-                        )
+                        ft.Text(f"{channel} | {geo} | {funnel} | {'вкл' if active else 'выкл'}", expand=True),
+                        ft.TextButton("Удалить", on_click=lambda e, x=cid: delete_router_channel(x))
                     ])
                 )
             )
 
-        rules = db_query(
-            """
+        rules = db_query("""
             SELECT d.id, c.channel, s.login, d.percent, d.manager_tag, d.active
             FROM traffic_distribution d
             LEFT JOIN traffic_channels c ON c.id=d.channel_id
             LEFT JOIN staff s ON s.id=d.staff_id
             ORDER BY d.id DESC
-            """,
-            fetch=True
-        ) or []
+        """, fetch=True) or []
 
         for rid, channel, login, percent, tag, active in rules:
             router_rules_list.controls.append(
@@ -292,20 +260,139 @@ def create_admin_ui(on_back, db_query):
                     border_radius=10,
                     padding=10,
                     content=ft.Row([
-                        ft.Text(
-                            f"{channel} → {login} | {percent}% | тег: {tag} | {'вкл' if active else 'выкл'}",
-                            expand=True
-                        ),
-                        ft.TextButton(
-                            "Удалить",
-                            on_click=lambda e, x=rid: delete_router_rule(x)
-                        )
+                        ft.Text(f"{channel} → {login} | {percent}% | тег: {tag} | {'вкл' if active else 'выкл'}", expand=True),
+                        ft.TextButton("Удалить", on_click=lambda e, x=rid: delete_router_rule(x))
                     ])
                 )
             )
 
         if e:
             e.page.update()
+
+    def load_funnel_steps(e=None):
+        funnel_steps_list.controls.clear()
+
+        rows = db_query("""
+            SELECT id, funnel, step_order, text, tag, next_step, active
+            FROM funnel_steps
+            ORDER BY funnel ASC, step_order ASC
+        """, fetch=True) or []
+
+        for step_id, funnel, step_order, text, tag, next_step, active in rows:
+            preview = (text or "")[:100] + ("..." if text and len(text) > 100 else "")
+
+            funnel_steps_list.controls.append(
+                ft.Container(
+                    bgcolor="#17212b",
+                    border_radius=10,
+                    padding=10,
+                    content=ft.Row([
+                        ft.Text(funnel or "-", width=130, weight="bold"),
+                        ft.Text(f"Шаг {step_order}", width=80),
+                        ft.Text(tag or "-", width=120),
+                        ft.Text(next_step or "-", width=90),
+                        ft.Text(preview, expand=True, size=13),
+                        ft.TextButton("Удалить", on_click=lambda e, x=step_id: delete_funnel_step(x))
+                    ])
+                )
+            )
+
+        if e:
+            e.page.update()
+
+    def add_funnel_step(e):
+        name = (funnel_name.value or "").strip()
+        text = (funnel_text.value or "").strip()
+        tag = (funnel_tag.value or "").strip()
+        next_step = (funnel_next.value or "").strip()
+
+        try:
+            step_order = int(funnel_step.value or "1")
+        except:
+            step_order = 1
+
+        if not name or not text:
+            router_status.value = "⚠️ Введи название воронки и текст шага"
+            e.page.update()
+            return
+
+        if not tag:
+            tag = f"{step_order} шаг"
+
+        if not next_step:
+            next_step = str(step_order + 1)
+
+        db_query("""
+            INSERT INTO funnel_steps
+            (funnel, step_order, text, tag, next_step, active)
+            VALUES (?, ?, ?, ?, ?, 1)
+        """, (name, step_order, text, tag, next_step))
+
+        funnel_step.value = str(step_order + 1)
+        funnel_text.value = ""
+        funnel_tag.value = ""
+        funnel_next.value = ""
+
+        router_status.value = "✅ Шаг воронки добавлен"
+        load_funnel_steps()
+        e.page.update()
+
+    def delete_funnel_step(step_id):
+        db_query("DELETE FROM funnel_steps WHERE id=?", (step_id,))
+        load_funnel_steps()
+
+    def load_tags(e=None):
+        tag_list.controls.clear()
+
+        rows = db_query(
+            "SELECT id, tag, color FROM tag_colors ORDER BY id DESC",
+            fetch=True
+        ) or []
+
+        for tag_id, tag, color in rows:
+            tag_list.controls.append(
+                ft.Container(
+                    bgcolor="#17212b",
+                    border_radius=10,
+                    padding=10,
+                    content=ft.Row([
+                        ft.Text(tag or "-", expand=True, color=color or None, weight="bold"),
+                        ft.Text(color or "-", width=120),
+                        ft.TextButton("Удалить", on_click=lambda e, x=tag_id: delete_tag_color(x))
+                    ])
+                )
+            )
+
+        if e:
+            e.page.update()
+
+    def add_tag_color(e):
+        tag = (tag_name.value or "").strip()
+        color = (tag_color.value or "").strip()
+
+        if not tag:
+            router_status.value = "⚠️ Введи тег"
+            e.page.update()
+            return
+
+        if not color:
+            color = "#4da3ff"
+
+        db_query("""
+            INSERT OR REPLACE INTO tag_colors (tag, color)
+            VALUES (?, ?)
+        """, (tag, color))
+
+        tag_name.value = ""
+        tag_color.value = ""
+        router_status.value = "✅ Тег добавлен"
+
+        load_tags()
+        e.page.update()
+
+    def delete_tag_color(tag_id):
+        db_query("DELETE FROM tag_colors WHERE id=?", (tag_id,))
+        load_tags()
 
     def add_router_channel(e):
         channel = (router_channel.value or "").strip()
@@ -318,14 +405,11 @@ def create_admin_ui(on_back, db_query):
             e.page.update()
             return
 
-        db_query(
-            """
+        db_query("""
             INSERT OR REPLACE INTO traffic_channels
             (channel, bot_token, geo, funnel, active)
             VALUES (?, ?, ?, ?, 1)
-            """,
-            (channel, token, geo, funnel)
-        )
+        """, (channel, token, geo, funnel))
 
         router_channel.value = ""
         router_token.value = ""
@@ -352,19 +436,16 @@ def create_admin_ui(on_back, db_query):
 
         tag = (router_manager_tag.value or "").strip()
 
-        db_query(
-            """
+        db_query("""
             INSERT INTO traffic_distribution
             (channel_id, staff_id, percent, manager_tag, access_mode, active)
             VALUES (?, ?, ?, ?, 'percent', 1)
-            """,
-            (
-                int(router_channel_dd.value),
-                int(router_staff_dd.value),
-                percent,
-                tag
-            )
-        )
+        """, (
+            int(router_channel_dd.value),
+            int(router_staff_dd.value),
+            percent,
+            tag
+        ))
 
         router_percent.value = "100"
         router_manager_tag.value = ""
@@ -395,6 +476,8 @@ def create_admin_ui(on_back, db_query):
 
     def show_router(e=None):
         load_router()
+        load_funnel_steps()
+        load_tags()
         admin_container.content = router_content
         if e:
             e.page.update()
@@ -402,6 +485,8 @@ def create_admin_ui(on_back, db_query):
     refresh_stats()
     load_staff()
     load_router()
+    load_funnel_steps()
+    load_tags()
 
     main_content.controls = [
         ft.TextButton("← Назад", on_click=on_back),
@@ -411,13 +496,7 @@ def create_admin_ui(on_back, db_query):
 
         ft.Divider(),
 
-        build_stats_row(
-            total_text,
-            regs_text,
-            deps_text,
-            blocked_text,
-            broadcasts_text
-        ),
+        build_stats_row(total_text, regs_text, deps_text, blocked_text, broadcasts_text),
 
         ft.FilledButton("Обновить статистику", on_click=refresh_stats),
 
@@ -456,9 +535,7 @@ def create_admin_ui(on_back, db_query):
         ft.Text("Создай логин/пароль для входа в CRM", color="#707579"),
 
         ft.Row([staff_login, staff_password]),
-
         ft.FilledButton("Создать аккаунт", on_click=add_staff),
-
         staff_status,
 
         ft.Text("Список аккаунтов", size=16, weight="bold"),
@@ -496,10 +573,7 @@ def create_admin_ui(on_back, db_query):
             ])
         ),
 
-        ft.Container(
-            content=push_list,
-            expand=True,
-        )
+        ft.Container(content=push_list, expand=True),
     ]
 
     router_content.controls = [
@@ -522,17 +596,37 @@ def create_admin_ui(on_back, db_query):
         ft.Divider(),
 
         ft.Text("Распределение по менеджерам", size=18, weight="bold"),
-        ft.Row([
-            router_channel_dd,
-            router_staff_dd,
-            router_percent,
-            router_manager_tag,
-        ]),
-
+        ft.Row([router_channel_dd, router_staff_dd, router_percent, router_manager_tag]),
         ft.FilledButton("Добавить распределение", on_click=add_router_rule),
 
         ft.Text("Список распределений", size=16, weight="bold"),
         router_rules_list,
+
+        ft.Divider(),
+
+        ft.Text("Воронки", size=18, weight="bold"),
+        ft.Text(
+            "Название воронки должно совпадать с полем 'Воронка' у канала.",
+            color="#707579"
+        ),
+
+        ft.Row([funnel_name, funnel_step, funnel_tag, funnel_next]),
+        funnel_text,
+        ft.FilledButton("Добавить шаг воронки", on_click=add_funnel_step),
+
+        ft.Text("Список шагов воронок", size=16, weight="bold"),
+        funnel_steps_list,
+
+        ft.Divider(),
+
+        ft.Text("Теги и цвета", size=18, weight="bold"),
+        ft.Text("Создай тег и цвет. Например: Парагвай / #2196F3", color="#707579"),
+
+        ft.Row([tag_name, tag_color]),
+        ft.FilledButton("Добавить тег", on_click=add_tag_color),
+
+        ft.Text("Список тегов", size=16, weight="bold"),
+        tag_list,
     ]
 
     admin_container.content = main_content

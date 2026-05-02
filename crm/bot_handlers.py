@@ -6,7 +6,7 @@ from datetime import datetime
 from utils import get_geo_data
 import os
 from dotenv import load_dotenv
-from traffic_router import route_new_lead
+from traffic_router import route_new_lead, get_channel_route, get_funnel_step
 
 load_dotenv()
 BOT_CHANNEL = os.getenv("BOT_CHANNEL", "Г1")
@@ -183,7 +183,14 @@ async def handle_any_message(message: types.Message):
 
         curr_step, curr_tags = "1", final_tags
         if text.startswith("/start"):
-            stage = FUNNEL.get("1")
+            route = get_channel_route(db_query_local, channel)
+            stage = None
+
+            if route and route.get("funnel"):
+                stage = get_funnel_step(db_query_local, route["funnel"], "1")
+
+            if not stage:
+                stage = FUNNEL.get("1")
 
             if stage and stage.get("text"):
                 db_query_local(
@@ -238,10 +245,15 @@ async def handle_any_message(message: types.Message):
     if curr_step == "processing":
         return
 
-    if curr_step in FUNNEL:
-        current_stage = FUNNEL[curr_step]
+        route = get_channel_route(db_query_local, getattr(message.bot, "crm_channel", BOT_CHANNEL))
+        current_stage = None
 
-        # сохраняем ответ лида на текущий шаг
+        if route and route.get("funnel") and str(curr_step).isdigit():
+            current_stage = get_funnel_step(db_query_local, route["funnel"], curr_step)
+
+        if not current_stage and curr_step in FUNNEL:
+            current_stage = FUNNEL[curr_step]
+
         if current_stage.get("save_to"):
             db_query_local(
                 f"UPDATE users SET {current_stage['save_to']} = ? WHERE user_id = ?",
@@ -266,7 +278,16 @@ async def handle_any_message(message: types.Message):
             return
 
         # отправляем следующий шаг
-        stage = FUNNEL[next_step]
+        stage = None
+
+        if route and route.get("funnel") and str(next_step).isdigit():
+            stage = get_funnel_step(db_query_local, route["funnel"], next_step)
+
+        if not stage:
+            stage = FUNNEL.get(next_step)
+
+        if not stage:
+            return
 
         db_query_local(
             "UPDATE users SET step='processing' WHERE user_id=?",

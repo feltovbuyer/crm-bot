@@ -25,6 +25,26 @@ def init_traffic_router(db_query):
     )
     """)
 
+    db_query("""
+    CREATE TABLE IF NOT EXISTS funnel_steps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        funnel TEXT,
+        step_order INTEGER,
+        text TEXT,
+        tag TEXT DEFAULT '',
+        next_step TEXT DEFAULT '',
+        active INTEGER DEFAULT 1
+    )
+    """)
+
+    db_query("""
+    CREATE TABLE IF NOT EXISTS tag_colors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tag TEXT UNIQUE,
+        color TEXT DEFAULT '#4da3ff'
+    )
+    """)
+
     try:
         db_query("ALTER TABLE users ADD COLUMN assigned_staff_id INTEGER")
     except:
@@ -49,7 +69,7 @@ def get_db_bots(db_query):
     return [(channel, token) for channel, token in rows]
 
 
-def route_new_lead(db_query, user_id, channel, current_tags):
+def get_channel_route(db_query, channel):
     row = db_query(
         """
         SELECT id, geo, funnel
@@ -62,9 +82,62 @@ def route_new_lead(db_query, user_id, channel, current_tags):
     )
 
     if not row:
+        return None
+
+    return {
+        "channel_id": row[0][0],
+        "geo": row[0][1] or "",
+        "funnel": row[0][2] or "",
+    }
+
+
+def get_funnel_step(db_query, funnel, step):
+    row = db_query(
+        """
+        SELECT text, tag, next_step
+        FROM funnel_steps
+        WHERE funnel=? AND step_order=? AND active=1
+        LIMIT 1
+        """,
+        (funnel, int(step)),
+        fetch=True
+    )
+
+    if not row:
+        return None
+
+    text, tag, next_step = row[0]
+
+    return {
+        "text": text or "",
+        "tag": tag or f"{step} шаг",
+        "next": next_step or str(int(step) + 1),
+        "save_to": f"step{step}_ans",
+    }
+
+
+def get_tag_color(db_query, tag):
+    row = db_query(
+        "SELECT color FROM tag_colors WHERE tag=? LIMIT 1",
+        (tag,),
+        fetch=True
+    )
+
+    if not row:
+        return None
+
+    return row[0][0]
+
+
+def route_new_lead(db_query, user_id, channel, current_tags):
+    route = get_channel_route(db_query, channel)
+
+    if not route:
         return current_tags
 
-    channel_id, geo, funnel = row[0]
+    channel_id = route["channel_id"]
+    geo = route["geo"]
+    funnel = route["funnel"]
 
     rules = db_query(
         """
