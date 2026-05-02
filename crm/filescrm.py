@@ -23,29 +23,48 @@ def build_message_content(
 
     if m_type == "photo" and url:
 
-        if show_preview:
-            img = ft.Image(
-                src=url,
-                width=250,
-                height=250,
-                fit="contain",
-            )
+        def load_photo_base64(u=url):
+            import urllib.request
+            import base64
 
-            if open_image_preview:
+            with urllib.request.urlopen(u, timeout=10) as response:
+                img_bytes = response.read()
+
+            return base64.b64encode(img_bytes).decode("utf-8")
+
+        if show_preview:
+            try:
+                img_base64 = load_photo_base64(url)
+
                 elements.append(
-                    ft.GestureDetector(
-                        content=img,
-                        on_tap=lambda e, u=url: open_image_preview(u),
+                    ft.Column([
+                        ft.Image(
+                            src_base64=img_base64,
+                            width=180,
+                            height=180,
+                            fit="contain",
+                        ),
+                        ft.TextButton(
+                            "Открыть фото",
+                            url=url
+                        )
+                    ])
+                )
+
+            except Exception as ex:
+                print("PHOTO PREVIEW ERROR:", ex)
+                elements.append(
+                    ft.TextButton(
+                        "🖼 Открыть фото",
+                        url=url
                     )
                 )
-            else:
-                elements.append(img)
 
         else:
             elements.append(
                 ft.TextButton(
                     "🖼 Открыть фото",
-                    on_click=lambda e, u=url: open_image_preview(u) if open_image_preview else None
+                    url=url
                 )
             )
 
