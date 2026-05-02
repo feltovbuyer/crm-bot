@@ -29,7 +29,8 @@ from ui_components import create_lead_card, create_broadcast_ui
 from auto_push import start_scheduler, create_push_tasks_for_tag
 from left_panel import update_left_panel
 from keitaro_tracker import start_keitaro_server
-from bot_handlers import router as bot_router, send_crm_message  # Подключаем новый хендлер
+from bot_handlers import router as bot_router, send_crm_message
+from traffic_router import init_traffic_router, get_db_bots# Подключаем новый хендлер
 
 try:
     from config import FUNNEL
@@ -84,6 +85,11 @@ def init_db():
 
 
 init_db()
+init_traffic_router(db_query)
+
+for channel, token in get_db_bots(db_query):
+    if not any(c == channel for c, _ in bots_config):
+        bots_config.append((channel, token))
 
 async def start_bot_instance(token, channel):
     local_bot = Bot(token=token)

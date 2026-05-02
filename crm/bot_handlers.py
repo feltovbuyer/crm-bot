@@ -6,6 +6,7 @@ from datetime import datetime
 from utils import get_geo_data
 import os
 from dotenv import load_dotenv
+from traffic_router import route_new_lead
 
 load_dotenv()
 BOT_CHANNEL = os.getenv("BOT_CHANNEL", "Г1")
@@ -156,16 +157,8 @@ async def handle_any_message(message: types.Message):
         db_query_local(
             """
             INSERT INTO users (
-                user_id,
-                username,
-                full_name,
-                created_at,
-                last_ts,
-                step,
-                tags,
-                is_blocked,
-                channel,
-                subid
+                user_id, username, full_name, created_at, last_ts,
+                step, tags, is_blocked, channel, subid
             )
             VALUES (?, ?, ?, ?, ?, '1', ?, 0, ?, ?)
             """,
@@ -181,7 +174,14 @@ async def handle_any_message(message: types.Message):
             )
         )
 
-        curr_step, curr_tags = "1", geo["label"]
+        final_tags = route_new_lead(
+            db_query_local,
+            uid,
+            channel,
+            geo["label"]
+        )
+
+        curr_step, curr_tags = "1", final_tags
         if text.startswith("/start"):
             stage = FUNNEL.get("1")
 
