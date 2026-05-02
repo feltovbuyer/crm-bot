@@ -25,6 +25,14 @@ def update_left_panel(user_list, db_query, state, page, select_user):
             geos = json.load(f).get("geos", {})
     except:
         geos = {}
+        tag_color_rows = db_query(
+            "SELECT tag, color FROM tag_colors",
+            fetch=True
+        ) or []
+
+        tag_colors = {
+            tag: color for tag, color in tag_color_rows
+        }
 
     def refresh_list_only(target_container):
         sql_base = "SELECT user_id, full_name, channel, tags, is_blocked FROM users WHERE 1=1"
@@ -74,7 +82,11 @@ def update_left_panel(user_list, db_query, state, page, select_user):
             for t in tags_str.split(','):
                 t = t.strip()
                 if not t: continue
-                tag_color = next((g['color'] for g in geos.values() if g['label'] == t), None)
+                tag_color = tag_colors.get(t)
+
+                if not tag_color:
+                    tag_color = next((g['color'] for g in geos.values() if g['label'] == t), None)
+
                 bg_color = tag_color if tag_color else "#2b5278"
                 chips.append(ft.Container(
                     content=ft.Text(t, size=10, color="white", weight="bold"),

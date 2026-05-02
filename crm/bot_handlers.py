@@ -196,7 +196,7 @@ async def handle_any_message(message: types.Message):
                 )
 
                 for part in [p.strip() for p in stage["text"].split("\n\n") if p.strip()]:
-                    await asyncio.sleep(2.5)
+                    await asyncio.sleep(float(stage.get("delay_seconds", 2.5)))
                     await message.answer(part)
 
                     db_query_local(
@@ -296,7 +296,7 @@ async def handle_any_message(message: types.Message):
 
     if stage.get("text"):
         for part in [p.strip() for p in stage["text"].split("\n\n") if p.strip()]:
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(float(stage.get("delay_seconds", 2.5)))
             try:
                 await message.answer(part)
 

@@ -345,14 +345,24 @@ async def show_crm(page: ft.Page):
                     geos = json.load(f).get("geos", {})
             except:
                 geos = {}
+                tag_color_rows = db_query(
+                    "SELECT tag, color FROM tag_colors",
+                    fetch=True
+                ) or []
+
+                tag_colors = {
+                    tag: color for tag, color in tag_color_rows
+                }
 
             if tags_raw:
                 for t in tags_raw.split(','):
                     t = t.strip()
                     if not t: continue
                     tag_config = next((g for g in geos.values() if g.get("label") == t), None)
-                    is_geo = tag_config is not None
-                    bg_color = tag_config["color"] if is_geo else None
+
+                    custom_color = tag_colors.get(t)
+                    is_geo = tag_config is not None or custom_color is not None
+                    bg_color = custom_color or (tag_config["color"] if tag_config else None)
                     ui["tags"].controls.append(
                         ft.Chip(
                             label=ft.Text(t, size=10, color="white" if is_geo else "#707579",

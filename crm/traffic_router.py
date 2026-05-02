@@ -36,6 +36,10 @@ def init_traffic_router(db_query):
         active INTEGER DEFAULT 1
     )
     """)
+    try:
+        db_query("ALTER TABLE funnel_steps ADD COLUMN delay_seconds REAL DEFAULT 2.5")
+    except:
+        pass
 
     db_query("""
     CREATE TABLE IF NOT EXISTS tag_colors (
@@ -94,7 +98,7 @@ def get_channel_route(db_query, channel):
 def get_funnel_step(db_query, funnel, step):
     row = db_query(
         """
-        SELECT text, tag, next_step
+        SELECT text, tag, next_step, delay_seconds
         FROM funnel_steps
         WHERE funnel=? AND step_order=? AND active=1
         LIMIT 1
@@ -106,13 +110,14 @@ def get_funnel_step(db_query, funnel, step):
     if not row:
         return None
 
-    text, tag, next_step = row[0]
+    text, tag, next_step, delay_seconds = row[0]
 
     return {
         "text": text or "",
         "tag": tag or f"{step} шаг",
         "next": next_step or str(int(step) + 1),
         "save_to": f"step{step}_ans",
+        "delay_seconds": float(delay_seconds or 2.5),
     }
 
 
