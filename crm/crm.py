@@ -199,7 +199,9 @@ async def show_crm(page: ft.Page):
         "search_tag": "",
         "chat_limit": 20,
         "is_loading_more": False,
-        "scroll_to_bottom": False,
+        "need_scroll_bottom": False,
+        "last_scroll": 0,
+        "last_chat_limit": 20,
     }
 
 
@@ -285,7 +287,10 @@ async def show_crm(page: ft.Page):
         state["active_id"] = int(uid)
         state["last_count"] = 0
         state["chat_limit"] = 20
-        state["scroll_to_bottom"] = True
+        state["is_loading_more"] = False
+        state["need_scroll_bottom"] = True
+        state["last_scroll"] = 0
+
 
         db_query(
             "UPDATE messages SET is_read=1 WHERE user_id=? AND sender='user'",
@@ -423,30 +428,37 @@ async def show_crm(page: ft.Page):
             db_query("UPDATE messages SET is_read=1 WHERE user_id=? AND sender='user'", (state["active_id"],))
             state["last_count"] = count
             page.update()
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
 
-            if state.get("is_loading_more") and state.get("scroll_restore") is not None:
-                await chat_col.scroll_to(
-                    offset=state["scroll_restore"],
-                    duration=0
-                )
-                state["scroll_restore"] = None
-
-            elif not state.get("is_loading_more"):
-                if state.get("scroll_to_bottom"):
-                    await asyncio.sleep(0.1)
-                    await chat_col.scroll_to(offset=-1, duration=200)
-                    state["scroll_to_bottom"] = False
+            if state.get("need_scroll_bottom") and not state.get("is_loading_more"):
+                await chat_col.scroll_to(offset=-1, duration=0)
+                state["need_scroll_bottom"] = False
 
     async def on_chat_scroll(e):
         if state.get("is_loading_more"):
             return
 
+        state["last_scroll"] = e.pixels
+
         if e.pixels <= 30:
             state["is_loading_more"] = True
+
+            old_pixels = e.pixels
+            old_limit = state["chat_limit"]
+
             state["chat_limit"] += 20
 
             await refresh_c(force=True)
+
+            added_count = state["chat_limit"] - old_limit
+
+            # компенсация высоты добавленных сообщений сверху
+            # чтобы визуально чат не дёргался
+            await asyncio.sleep(0.05)
+            await chat_col.scroll_to(
+                offset=old_pixels + added_count * 85,
+                duration=0
+            )
 
             state["is_loading_more"] = False
 
@@ -555,6 +567,7 @@ async def show_crm(page: ft.Page):
                 selected_file["name"] = None
                 selected_file_label.value = ""
 
+                state["need_scroll_bottom"] = True
                 await refresh_c(force=True)
 
                 selected_file["path"] = None
