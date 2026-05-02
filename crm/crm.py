@@ -198,10 +198,7 @@ async def show_crm(page: ft.Page):
         "search_text": "",
         "search_tag": "",
         "chat_limit": 100000,
-        "is_loading_more": False,
         "need_scroll_bottom": False,
-        "last_scroll": 0,
-        "last_chat_limit": 20,
     }
 
 
@@ -286,10 +283,9 @@ async def show_crm(page: ft.Page):
     async def select_user(uid):
         state["active_id"] = int(uid)
         state["last_count"] = 0
-        state["chat_limit"] = 20
-        state["is_loading_more"] = False
+        state["chat_limit"] = 2000
         state["need_scroll_bottom"] = True
-        state["last_scroll"] = 0
+
 
 
         db_query(
@@ -429,37 +425,15 @@ async def show_crm(page: ft.Page):
                 ctrl.key = f"msg_{m_id}"
                 new_controls.append(ctrl)
 
-            if state.get("is_loading_more"):
-                # берём только новые старые сообщения (те что добавились сверху)
-                existing_count = len(chat_col.controls)
-                new_part = new_controls[:-existing_count] if existing_count else new_controls
-
-                for ctrl in reversed(new_part):
-                    chat_col.controls.insert(0, ctrl)
-            else:
-                chat_col.controls = new_controls
+            chat_col.controls = new_controls
+            state["last_count"] = count
 
             page.update()
             await asyncio.sleep(0.05)
 
-            if state.get("need_scroll_bottom") and not state.get("is_loading_more"):
+            if state.get("need_scroll_bottom"):
                 await chat_col.scroll_to(offset=-1, duration=0)
                 state["need_scroll_bottom"] = False
-
-    async def on_chat_scroll(e):
-        if state.get("is_loading_more"):
-            return
-
-        if e.pixels <= 30 and chat_col.controls:
-            state["is_loading_more"] = True
-
-            anchor_index = min(3, len(chat_col.controls) - 1)
-            anchor_key = chat_col.controls[anchor_index].key
-
-            state["chat_limit"] += 20
-            await refresh_c(force=True)
-
-            state["is_loading_more"] = False
 
     # Отправка сообщения админом
     async def send_m(e=None):

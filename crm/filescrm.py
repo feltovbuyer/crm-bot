@@ -27,7 +27,7 @@ def build_message_content(
                 src=url,
                 width=250,
                 height=250,
-                fit=ft.ImageFit.CONTAIN,
+                fit="contain",
                 border_radius=8,
             )
 
