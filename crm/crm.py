@@ -399,7 +399,7 @@ async def show_crm(page: ft.Page):
             )
             # берём только фото
             photo_messages = [m for m in ms if m[4] == "photo"]
-            visible_photo_ids = set(m[0] for m in photo_messages[-25:])
+            visible_photo_ids = set(m[0] for m in photo_messages[-3:])
 
             new_controls = []
 
