@@ -317,6 +317,20 @@ async def show_crm(page: ft.Page):
         state["chat_limit"] = 2000
         state["need_scroll_bottom"] = True
 
+        tag_colors = {}
+
+        try:
+            tag_color_rows = db_query(
+                "SELECT tag, color FROM tag_colors",
+                fetch=True
+            ) or []
+
+            tag_colors = {
+                tag: color for tag, color in tag_color_rows
+            }
+        except:
+            tag_colors = {}
+
 
 
         db_query(

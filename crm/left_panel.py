@@ -25,21 +25,22 @@ def update_left_panel(user_list, db_query, state, page, select_user):
             geos = json.load(f).get("geos", {})
     except:
         geos = {}
+
+    def refresh_list_only(target_container):
         tag_colors = {}
 
         try:
-            rows = db_query(
+            tag_color_rows = db_query(
                 "SELECT tag, color FROM tag_colors",
                 fetch=True
             ) or []
 
             tag_colors = {
-                tag: color for tag, color in rows
+                tag: color for tag, color in tag_color_rows
             }
         except:
             tag_colors = {}
 
-    def refresh_list_only(target_container):
         sql_base = "SELECT user_id, full_name, channel, tags, is_blocked FROM users WHERE 1=1"
         params = []
 
@@ -90,7 +91,7 @@ def update_left_panel(user_list, db_query, state, page, select_user):
                 tag_color = tag_colors.get(t)
 
                 if not tag_color:
-                    tag_color = tag_colors.get(t)
+                    tag_color = next((g['color'] for g in geos.values() if g['label'] == t), None)
 
                     if not tag_color:
                         tag_color = next((g['color'] for g in geos.values() if g['label'] == t), None)
