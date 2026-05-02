@@ -436,29 +436,18 @@ async def show_crm(page: ft.Page):
 
     async def on_chat_scroll(e):
         if state.get("is_loading_more"):
-            return
+                    return
 
         state["last_scroll"] = e.pixels
 
+     # дошёл до верха — просто увеличиваем лимит
         if e.pixels <= 30:
             state["is_loading_more"] = True
-
-            old_pixels = e.pixels
-            old_limit = state["chat_limit"]
-
             state["chat_limit"] += 20
 
             await refresh_c(force=True)
 
-            added_count = state["chat_limit"] - old_limit
-
-            # компенсация высоты добавленных сообщений сверху
-            # чтобы визуально чат не дёргался
-            await asyncio.sleep(0.05)
-            await chat_col.scroll_to(
-                offset=old_pixels + added_count * 85,
-                duration=0
-            )
+            state["is_loading_more"] = False
 
             state["is_loading_more"] = False
 
