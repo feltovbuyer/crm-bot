@@ -45,6 +45,7 @@ for key, value in os.environ.items():
 
 bots_by_channel = {}
 default_bot = None
+polling_started = False
 
 
 # --- РАБОТА С БАЗОЙ ДАННЫХ ---
@@ -656,31 +657,32 @@ async def show_crm(page: ft.Page):
     )
 
     # Запуск бота
-    global default_bot
 
-    global default_bot
+    global default_bot, polling_started
 
-    polling_bots = []
+    if not polling_started:
+        polling_bots = []
 
-    for i, (channel, token) in enumerate(bots_config):
-        task_bot = Bot(token=token)
-        task_bot.crm_channel = channel
+        for i, (channel, token) in enumerate(bots_config):
+            task_bot = Bot(token=token)
+            task_bot.crm_channel = channel
 
-        if i == 0:
-            default_bot = task_bot
+            if i == 0:
+                default_bot = task_bot
 
-        bots_by_channel[channel] = task_bot
-        polling_bots.append(task_bot)
+            bots_by_channel[channel] = task_bot
+            polling_bots.append(task_bot)
 
-        print(f"Запущен бот {channel}")
+            print(f"Запущен бот {channel}")
 
-    multi_dp = Dispatcher()
-    multi_dp.include_router(bot_router)
+        multi_dp = Dispatcher()
+        multi_dp.include_router(bot_router)
 
-    asyncio.create_task(multi_dp.start_polling(*polling_bots))
-    asyncio.create_task(start_scheduler(get_bot_for_user))
+        asyncio.create_task(multi_dp.start_polling(*polling_bots))
+        asyncio.create_task(start_keitaro_server(db_query, port=8080))
+        asyncio.create_task(start_scheduler(get_bot_for_user))
 
-    asyncio.create_task(start_keitaro_server(db_query, port=8080))
+        polling_started = True
 
     # Цикл обновления UI
     while True:
