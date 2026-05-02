@@ -393,7 +393,8 @@ async def show_crm(page: ft.Page):
             # последние 25 фото будут видны
             visible_photo_ids = set(id(m) for m in photo_messages[-25:])
 
-            chat_col.controls = []
+            new_controls = []
+
             for m in ms:
                 m_sender, m_text, m_time, m_type, m_media_id = m
 
@@ -402,18 +403,7 @@ async def show_crm(page: ft.Page):
                 if m_type == "photo" and id(m) not in visible_photo_ids:
                     show_preview = False
 
-                # Логика заглушек для медиа в чате CRM
-                if not m_text and m_type:
-                    d_text = {
-                        "voice": "🎤 Голосовое сообщение",
-                        "video_note": "🔘 Кружок",
-                        "photo": "🖼 Фотография",
-                        "document": "📄 Файл / Скриншот документом"
-                    }.get(m_type, "📎 Файл")
-                else:
-                    d_text = m_text
-
-                chat_col.controls.append(
+                new_controls.append(
                     build_message_content(
                         m_sender,
                         m_text,
@@ -425,8 +415,16 @@ async def show_crm(page: ft.Page):
                         show_preview=show_preview
                     )
                 )
-            db_query("UPDATE messages SET is_read=1 WHERE user_id=? AND sender='user'", (state["active_id"],))
-            state["last_count"] = count
+
+            if state.get("is_loading_more"):
+                old_len = len(chat_col.controls)
+                extra = len(new_controls) - old_len
+
+                if extra > 0:
+                    chat_col.controls = new_controls[:extra] + chat_col.controls
+            else:
+                chat_col.controls = new_controls
+
             page.update()
             await asyncio.sleep(0.05)
 
@@ -436,18 +434,16 @@ async def show_crm(page: ft.Page):
 
     async def on_chat_scroll(e):
         if state.get("is_loading_more"):
-                    return
+            return
 
         state["last_scroll"] = e.pixels
 
-     # дошёл до верха — просто увеличиваем лимит
+        # дошёл до верха — догружаем
         if e.pixels <= 30:
             state["is_loading_more"] = True
             state["chat_limit"] += 20
 
             await refresh_c(force=True)
-
-            state["is_loading_more"] = False
 
             state["is_loading_more"] = False
 
