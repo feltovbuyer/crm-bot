@@ -440,7 +440,8 @@ async def show_crm(page: ft.Page):
         if e.pixels <= 30 and chat_col.controls:
             state["is_loading_more"] = True
 
-            anchor_key = chat_col.controls[0].key
+            anchor_index = min(3, len(chat_col.controls) - 1)
+            anchor_key = chat_col.controls[anchor_index].key
 
             state["chat_limit"] += 20
             await refresh_c(force=True)
