@@ -249,6 +249,11 @@ async def show_crm(page: ft.Page):
 
             rows = get_custom_tags(db_query, search_field.value)
 
+            if not rows:
+                grid.controls.append(
+                    ft.Text("Нет тегов. Создай тег в админке → Теги")
+                )
+
             for tag_id, name, color in rows:
                 grid.controls.append(
                     ft.Container(
@@ -282,6 +287,8 @@ async def show_crm(page: ft.Page):
             ]
         )
 
+        if page.dialog not in page.overlay:
+            page.overlay.append(page.dialog)
 
         load_tags()
         page.dialog.open = True
