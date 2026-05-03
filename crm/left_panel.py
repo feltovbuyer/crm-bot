@@ -88,15 +88,22 @@ def update_left_panel(user_list, db_query, state, page, select_user):
             for t in tags_str.split(','):
                 t = t.strip()
                 if not t: continue
+                # цвет из tag_colors
                 tag_color = tag_colors.get(t)
 
-                if not tag_color:
-                    tag_color = next((g['color'] for g in geos.values() if g['label'] == t), None)
+                # цвет из custom_tags
+                custom_tag_row = db_query(
+                    "SELECT color FROM custom_tags WHERE name=? AND active=1",
+                    (t,),
+                    fetch=True
+                )
+                custom_tag_color = custom_tag_row[0][0] if custom_tag_row else None
 
-                    if not tag_color:
-                        tag_color = next((g['color'] for g in geos.values() if g['label'] == t), None)
+                # цвет из гео
+                geo_color = next((g['color'] for g in geos.values() if g['label'] == t), None)
 
-                    bg_color = tag_color if tag_color else "#2b5278"
+                # финальный цвет
+                bg_color = custom_tag_color or tag_color or geo_color or "#2b5278"
 
                 bg_color = tag_color if tag_color else "#2b5278"
                 chips.append(ft.Container(

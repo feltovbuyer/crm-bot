@@ -230,7 +230,7 @@ async def show_crm(page: ft.Page):
             add_tag_to_user(db_query, state["active_id"], name)
 
             bot = get_bot_for_user(state["active_id"])
-            if bot:
+            if bot and tag_id != 0:
                 page.run_task(
                     run_instant_tag_actions,
                     db_query,
@@ -247,11 +247,26 @@ async def show_crm(page: ft.Page):
         def load_tags(e=None):
             grid.controls.clear()
 
-            rows = get_custom_tags(db_query, search_field.value)
+            base_tags = [
+                (0, "ФД", "#4da3ff"),
+                (0, "РД", "#ff9800"),
+                (0, "Депозит", "#4caf50"),
+                (0, "Регистрация", "#9c27b0"),
+                (0, "Прошел воронку", "#607d8b"),
+                (0, "403", "#f44336"),
+            ]
+
+            custom_rows = get_custom_tags(db_query, search_field.value)
+
+            rows = base_tags + custom_rows
+
+            if search_field.value:
+                q = search_field.value.lower()
+                rows = [r for r in rows if q in r[1].lower()]
 
             if not rows:
                 grid.controls.append(
-                    ft.Text("Нет тегов. Создай тег в админке → Теги")
+                    ft.Text("Нет тегов")
                 )
 
             for tag_id, name, color in rows:
@@ -468,21 +483,34 @@ async def show_crm(page: ft.Page):
                         continue
 
                     tag_config = next((g for g in geos.values() if g.get("label") == t), None)
+
                     custom_color = tag_colors.get(t)
 
-                    is_geo = tag_config is not None or custom_color is not None
-                    bg_color = custom_color or (tag_config["color"] if tag_config else None)
+                    custom_tag_row = db_query(
+                        "SELECT color FROM custom_tags WHERE name=? AND active=1",
+                        (t,),
+                        fetch=True
+                    )
+
+                    custom_tag_color = custom_tag_row[0][0] if custom_tag_row else None
+
+                    is_geo = tag_config is not None or custom_color is not None or custom_tag_color is not None
+                    bg_color = custom_tag_color or custom_color or (tag_config["color"] if tag_config else None)
 
                     ui["tags"].controls.append(
-                        ft.Chip(
-                            label=ft.Text(
+                        ft.Container(
+                            bgcolor=bg_color or "#243447",
+                            border_radius=20,
+                            padding=ft.padding.symmetric(horizontal=10, vertical=6),
+                            margin=ft.margin.only(right=4, bottom=4),
+                            content=ft.Text(
                                 t,
-                                size=10,
-                                color="white" if is_geo else "#707579",
-                                weight="bold" if is_geo else "normal"
+                                size=11,
+                                color="white" if bg_color else "#cfd8dc",
+                                weight="bold" if bg_color else "normal",
+                                no_wrap=False,
                             ),
-                            bgcolor=bg_color,
-                            on_click=lambda e, v=t: page.run_task(delete_tag, v)
+                            on_click=lambda e, v=t: page.run_task(delete_tag, v),
                         )
                     )
 

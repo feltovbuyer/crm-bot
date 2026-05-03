@@ -1,5 +1,7 @@
 import flet as ft
 from admin_stats import build_stats_row
+import os
+import uuid
 from traffic_router import init_traffic_router
 from custom_tags import (
     init_custom_tags,
@@ -14,6 +16,11 @@ from custom_tags import (
 def create_admin_ui(on_back, db_query):
     init_custom_tags(db_query)
     init_traffic_router(db_query)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+    instant_file_picker = ft.FilePicker()
 
     total_text = ft.Text("0", size=28, weight="bold")
     regs_text = ft.Text("0", size=28, weight="bold")
@@ -65,22 +72,15 @@ def create_admin_ui(on_back, db_query):
 
     # === INSTANT TAGS ===
     instant_tag_dd = ft.Dropdown(label="Тег", width=220, options=[])
-    instant_action_type = ft.Dropdown(
-        label="Тип",
-        width=160,
-        value="text",
-        options=[
-            ft.dropdown.Option("text"),
-            ft.dropdown.Option("photo"),
-            ft.dropdown.Option("voice"),
-            ft.dropdown.Option("document"),
-            ft.dropdown.Option("video_note"),
-        ],
+
+    instant_delay = ft.TextField(
+        label="Задержка между сообщениями (сек)",
+        width=220,
+        value="0"
     )
-    instant_order = ft.TextField(label="Порядок", width=90, value="1")
-    instant_delay = ft.TextField(label="Задержка сек", width=130, value="0")
-    instant_text = ft.TextField(label="Текст", width=520, multiline=True)
-    instant_file_path = ft.TextField(label="file_path", width=520)
+
+    instant_rows = []
+    instant_rows_col = ft.Column(spacing=10)
 
     instant_status = ft.Text("", color="#a8c7fa")
     instant_actions_list = ft.Column(spacing=8)
@@ -470,33 +470,161 @@ def create_admin_ui(on_back, db_query):
         delete_custom_tag(db_query, tag_id)
         load_custom_tags()
 
+    def detect_action_type(file_path):
+        if not file_path:
+            return "text"
+
+        ext = os.path.splitext(file_path)[1].lower()
+
+        if ext in [".jpg", ".jpeg", ".png", ".webp"]:
+            return "photo"
+
+        if ext in [".ogg", ".oga"]:
+            return "voice"
+
+        return "document"
+
+    async def pick_instant_file(e, row_data):
+        files = await instant_file_picker.pick_files(allow_multiple=False)
+
+        if not files:
+            return
+
+        f = files[0]
+        ext = os.path.splitext(f.name)[1].lower()
+        server_name = f"instant_{uuid.uuid4().hex}{ext}"
+        server_path = os.path.join(UPLOAD_DIR, server_name)
+
+        row_data["file_path"] = server_path
+        row_data["file_label"].value = f"✅ {f.name}"
+
+        upload_url = e.page.get_upload_url(server_name, 600)
+
+        await instant_file_picker.upload([
+            ft.FilePickerUploadFile(
+                name=f.name,
+                upload_url=upload_url,
+            )
+        ])
+
+        e.page.update()
+
+    def render_instant_rows(page=None):
+        instant_rows_col.controls.clear()
+
+        for idx, row in enumerate(instant_rows, start=1):
+            instant_rows_col.controls.append(
+                ft.Row([
+                    row["text_field"],
+                    ft.FilledButton(
+                        "+++ Следующее сообщение",
+                        on_click=lambda e: add_instant_row(e.page)
+                    ),
+                    ft.FilledButton(
+                        "Прикрепить",
+                        on_click=lambda e, r=row: e.page.run_task(pick_instant_file, e, r)
+                    ),
+                    row["file_label"],
+                ])
+            )
+
+        if page:
+            page.update()
+
+    def add_instant_row(page=None):
+        row_data = {
+            "text_field": ft.TextField(
+                label="Текст сообщения",
+                width=520,
+                multiline=True,
+                min_lines=1,
+                max_lines=4,
+            ),
+            "file_path": "",
+            "file_label": ft.Text("", size=12, color="#a8c7fa"),
+        }
+
+        instant_rows.append(row_data)
+        render_instant_rows(page)
+
     def load_instant_actions(e=None):
         instant_actions_list.controls.clear()
 
         rows = db_query("""
-            SELECT id, action_type, text, file_path, delay_seconds
-            FROM instant_tag_actions
-            WHERE active=1
+            SELECT a.id, t.name, a.action_order, a.action_type, a.text, a.file_path, a.delay_seconds
+            FROM instant_tag_actions a
+            LEFT JOIN custom_tags t ON t.id = a.tag_id
+            WHERE a.active = 1
+            ORDER BY t.name ASC, a.action_order ASC, a.id ASC
         """, fetch=True) or []
 
-        for action_id, action_type, text, file_path, delay in rows:
+        for action_id, tag_name, order_num, action_type, text, file_path, delay in rows:
             instant_actions_list.controls.append(
-                ft.Text(f"{action_type} | {delay}s | {text or file_path}")
+                ft.Container(
+                    bgcolor="#17212b",
+                    border_radius=10,
+                    padding=10,
+                    content=ft.Row([
+                        ft.Text(tag_name or "-", width=140, weight="bold"),
+                        ft.Text(f"#{order_num or 1}", width=50),
+                        ft.Text(action_type or "-", width=90),
+                        ft.Text(f"{delay or 0} сек", width=90),
+                        ft.Text((text or file_path or "")[:120], expand=True, size=13),
+                        ft.TextButton(
+                            "Удалить",
+                            on_click=lambda e, x=action_id: delete_instant_action_ui(x)
+                        ),
+                    ])
+                )
             )
 
-    def add_instant_action_ui(e):
-        add_instant_action(
-            db_query,
-            int(instant_tag_dd.value),
-            int(instant_order.value or 1),
-            instant_action_type.value,
-            instant_text.value,
-            instant_file_path.value,
-            int(instant_delay.value or 0)
-        )
+        if e:
+            e.page.update()
 
+    def save_instant_chain(e):
+        if not instant_tag_dd.value:
+            instant_status.value = "⚠️ Выбери тег"
+            e.page.update()
+            return
+
+        try:
+            delay = int(instant_delay.value or "0")
+        except:
+            delay = 0
+
+        saved = 0
+
+        for idx, row in enumerate(instant_rows, start=1):
+            text = (row["text_field"].value or "").strip()
+            file_path = row.get("file_path") or ""
+
+            if not text and not file_path:
+                continue
+
+            add_instant_action(
+                db_query,
+                int(instant_tag_dd.value),
+                idx,
+                detect_action_type(file_path),
+                text,
+                file_path,
+                delay
+            )
+            saved += 1
+
+        if saved == 0:
+            instant_status.value = "⚠️ Добавь текст или файл"
+            e.page.update()
+            return
+
+        instant_status.value = f"✅ Сохранено сообщений: {saved}"
+        instant_rows.clear()
+        add_instant_row(e.page)
         load_instant_actions()
         e.page.update()
+
+
+
 
     def delete_instant_action_ui(action_id):
         delete_instant_action(db_query, action_id)
@@ -509,9 +637,17 @@ def create_admin_ui(on_back, db_query):
             e.page.update()
 
     def show_instant_tags(e=None):
+        if e and instant_file_picker not in e.page.services:
+            e.page.services.append(instant_file_picker)
+
         load_custom_tags()
         load_instant_actions()
+
+        if not instant_rows:
+            add_instant_row()
+
         admin_container.content = instant_tags_content
+
         if e:
             e.page.update()
 
@@ -767,18 +903,23 @@ def create_admin_ui(on_back, db_query):
 
     instant_tags_content.controls = [
         ft.TextButton("← Назад", on_click=show_main),
-        ft.Text("Инстант-теги", size=20),
+        ft.Text("Инстант-теги", size=22, weight="bold"),
 
-        instant_tag_dd,
-        instant_action_type,
-        instant_text,
-        instant_file_path,
-        instant_delay,
+        ft.Row([
+            instant_tag_dd,
+            instant_delay,
+        ]),
 
-        ft.FilledButton("Добавить действие", on_click=add_instant_action_ui),
+        instant_rows_col,
 
+        ft.FilledButton("Сохранить цепочку", on_click=save_instant_chain),
+
+        instant_status,
+
+        ft.Divider(),
+
+        ft.Text("Список сохранённых сообщений", size=16, weight="bold"),
         instant_actions_list
     ]
-
     admin_container.content = main_content
     return admin_container
