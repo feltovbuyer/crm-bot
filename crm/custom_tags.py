@@ -72,6 +72,9 @@ def get_actions(db_query, tag_id):
 
 async def run_instant_tag_actions(db_query, bot, user_id, tag_id, send_crm_message):
     import asyncio
+    import os
+    from datetime import datetime
+    from aiogram import types
 
     actions = get_actions(db_query, tag_id)
 
@@ -79,13 +82,65 @@ async def run_instant_tag_actions(db_query, bot, user_id, tag_id, send_crm_messa
         if delay:
             await asyncio.sleep(delay)
 
-        await send_crm_message(
-            bot=bot,
-            user_id=user_id,
-            text=text or "",
-            media_type=None if action_type == "text" else action_type,
-            media_id=file_path or None
-        )
+        text = text or ""
+        file_path = file_path or ""
+
+        if file_path and os.path.exists(file_path):
+            media_type = None
+            media_id = None
+
+            if action_type == "photo":
+                sent = await bot.send_photo(
+                    int(user_id),
+                    photo=types.FSInputFile(file_path),
+                    caption=text
+                )
+                file = await bot.get_file(sent.photo[-1].file_id)
+                media_type = "photo"
+                media_id = file.file_path
+
+            elif action_type == "voice":
+                sent = await bot.send_voice(
+                    int(user_id),
+                    voice=types.FSInputFile(file_path),
+                    caption=text
+                )
+                file = await bot.get_file(sent.voice.file_id)
+                media_type = "voice"
+                media_id = file.file_path
+
+            else:
+                sent = await bot.send_document(
+                    int(user_id),
+                    document=types.FSInputFile(file_path),
+                    caption=text
+                )
+                file = await bot.get_file(sent.document.file_id)
+                media_type = "document"
+                media_id = file.file_path
+
+            db_query(
+                """
+                INSERT INTO messages (user_id, sender, text, is_read, time, media_type, media_id)
+                VALUES (?, 'admin', ?, 1, ?, ?, ?)
+                """,
+                (
+                    int(user_id),
+                    text or os.path.basename(file_path),
+                    datetime.now().strftime("%H:%M"),
+                    media_type,
+                    media_id
+                )
+            )
+
+        else:
+            await send_crm_message(
+                bot=bot,
+                user_id=int(user_id),
+                text=text,
+                media_type=None,
+                media_id=None
+            )
 
 
 def delete_instant_action(db_query, action_id):

@@ -247,14 +247,35 @@ async def show_crm(page: ft.Page):
         def load_tags(e=None):
             grid.controls.clear()
 
-            base_tags = [
-                (0, "ФД", "#4da3ff"),
-                (0, "РД", "#ff9800"),
-                (0, "Депозит", "#4caf50"),
-                (0, "Регистрация", "#9c27b0"),
-                (0, "Прошел воронку", "#607d8b"),
-                (0, "403", "#f44336"),
-            ]
+            try:
+                with open("config.json", "r", encoding="utf-8") as f:
+                    geos_cfg = json.load(f).get("geos", {})
+            except:
+                geos_cfg = {}
+
+            tag_color_rows = db_query("SELECT tag, color FROM tag_colors", fetch=True) or []
+            tag_colors_map = {tag: color for tag, color in tag_color_rows}
+
+            def resolve_tag_color(tag):
+                custom_row = db_query(
+                    "SELECT color FROM custom_tags WHERE name=? AND active=1",
+                    (tag,),
+                    fetch=True
+                )
+                if custom_row:
+                    return custom_row[0][0]
+
+                if tag in tag_colors_map:
+                    return tag_colors_map[tag]
+
+                geo = next((g for g in geos_cfg.values() if g.get("label") == tag), None)
+                if geo:
+                    return geo.get("color")
+
+                return "#2b5278"
+
+            base_tag_names = ["ФД", "РД", "Депозит", "Регистрация", "Прошел воронку", "403"]
+            base_tags = [(0, name, resolve_tag_color(name)) for name in base_tag_names]
 
             custom_rows = get_custom_tags(db_query, search_field.value)
 
@@ -500,8 +521,8 @@ async def show_crm(page: ft.Page):
                     ui["tags"].controls.append(
                         ft.Container(
                             bgcolor=bg_color or "#243447",
-                            border_radius=20,
-                            padding=ft.padding.symmetric(horizontal=10, vertical=6),
+                            border_radius=8,
+                            padding=ft.padding.symmetric(horizontal=12, vertical=8),
                             margin=ft.margin.only(right=4, bottom=4),
                             content=ft.Text(
                                 t,
