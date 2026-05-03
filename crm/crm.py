@@ -21,6 +21,12 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 from broadcast_module import run_broadcast
 from authadmin import open_admin_login
+from custom_tags import (
+    init_custom_tags,
+    get_custom_tags,
+    add_tag_to_user,
+    run_instant_tag_actions,
+)
 
 
 
@@ -66,15 +72,14 @@ def db_query(sql, params=(), fetch=False):
 
 
 def init_db():
-    # Таблица юзеров
     db_query(
-        "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, step TEXT DEFAULT '1', tags TEXT DEFAULT '', step1_ans TEXT DEFAULT '-', step2_ans TEXT DEFAULT '-', step3_ans TEXT DEFAULT '-', phone TEXT DEFAULT '', created_at TEXT, channel TEXT DEFAULT 'Г1', comment TEXT DEFAULT '', media TEXT DEFAULT '', last_ts REAL DEFAULT 0, is_blocked INTEGER DEFAULT 0)")
+        "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, step TEXT DEFAULT '1', tags TEXT DEFAULT '', step1_ans TEXT DEFAULT '-', step2_ans TEXT DEFAULT '-', step3_ans TEXT DEFAULT '-', phone TEXT DEFAULT '', created_at TEXT, channel TEXT DEFAULT 'Г1', comment TEXT DEFAULT '', media TEXT DEFAULT '', last_ts REAL DEFAULT 0, is_blocked INTEGER DEFAULT 0)"
+    )
 
-    # Таблица сообщений (сразу с колонками для медиа)
     db_query(
-        "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, sender TEXT, text TEXT, is_read INTEGER DEFAULT 0, time TEXT, media_type TEXT, media_id TEXT)")
+        "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, sender TEXT, text TEXT, is_read INTEGER DEFAULT 0, time TEXT, media_type TEXT, media_id TEXT)"
+    )
 
-    # Принудительная проверка колонок (если база уже была создана без них)
     try:
         db_query("ALTER TABLE messages ADD COLUMN media_type TEXT")
         db_query("ALTER TABLE messages ADD COLUMN media_id TEXT")
@@ -83,6 +88,7 @@ def init_db():
     except:
         pass
 
+    init_custom_tags(db_query)
 
 init_db()
 init_traffic_router(db_query)
@@ -206,6 +212,80 @@ async def show_crm(page: ft.Page):
         "chat_limit": 100000,
         "need_scroll_bottom": False,
     }
+
+    def open_custom_tags_modal(e):
+        if not state.get("active_id"):
+            return
+
+        search_field = ft.TextField(label="Поиск", width=300)
+
+        grid = ft.GridView(
+            expand=True,
+            runs_count=3,
+            max_extent=120,
+            child_aspect_ratio=2.5,
+        )
+
+        async def choose_tag(ev, tag_id, name):
+            add_tag_to_user(db_query, state["active_id"], name)
+
+            bot = get_bot_for_user(state["active_id"])
+            if bot:
+                page.run_task(
+                    run_instant_tag_actions,
+                    db_query,
+                    bot,
+                    state["active_id"],
+                    tag_id,
+                    send_crm_message,
+                )
+
+            page.dialog.open = False
+            await refresh_c(force=True)
+            page.update()
+
+        def load_tags(e=None):
+            grid.controls.clear()
+
+            rows = get_custom_tags(db_query, search_field.value)
+
+            for tag_id, name, color in rows:
+                grid.controls.append(
+                    ft.Container(
+                        bgcolor=color or "#4da3ff",
+                        border_radius=10,
+                        padding=10,
+                        ink=True,
+                        on_click=lambda ev, i=tag_id, n=name: page.run_task(choose_tag, ev, i, n),
+                        content=ft.Text(name, color="white"),
+                    )
+                )
+
+            page.update()
+
+        search_field.on_change = load_tags
+
+        page.dialog = ft.AlertDialog(
+            title=ft.Text("Выбери тег"),
+            content=ft.Column([
+                search_field,
+                grid
+            ], width=400, height=400),
+            actions=[
+                ft.TextButton(
+                    "Закрыть",
+                    on_click=lambda e: (
+                        setattr(page.dialog, "open", False),
+                        page.update()
+                    )
+                )
+            ]
+        )
+
+
+        load_tags()
+        page.dialog.open = True
+        page.update()
 
 
     def clear_selected_file(e=None):
@@ -669,7 +749,9 @@ async def show_crm(page: ft.Page):
         page.update()
 
     br_ui["btn"].on_click = on_broadcast_start
-    ui["save_btn"].on_click, ui["add_tag_btn"].on_click = save_data, show_tag_dialog
+    ui["save_btn"].on_click = save_data
+    ui["add_tag_btn"].on_click = open_custom_tags_modal
+    ui["add_tag_btn"].text = "Добавить тег"
 
     user_list = ft.Column(
         scroll="always",

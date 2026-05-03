@@ -1,9 +1,18 @@
 import flet as ft
 from admin_stats import build_stats_row
 from traffic_router import init_traffic_router
+from custom_tags import (
+    init_custom_tags,
+    get_custom_tags,
+    add_custom_tag,
+    delete_custom_tag,
+    add_instant_action,
+    delete_instant_action,
+)
 
 
 def create_admin_ui(on_back, db_query):
+    init_custom_tags(db_query)
     init_traffic_router(db_query)
 
     total_text = ft.Text("0", size=28, weight="bold")
@@ -48,6 +57,36 @@ def create_admin_ui(on_back, db_query):
     tag_name = ft.TextField(label="Тег", width=180, hint_text="Парагвай")
     tag_color = ft.TextField(label="Цвет", width=160, hint_text="#2196F3")
     tag_list = ft.Column(spacing=8)
+    # === CUSTOM TAGS ===
+    custom_tag_name = ft.TextField(label="Название тега", width=220)
+    custom_tag_color = ft.TextField(label="Цвет #hex", width=160, value="#4da3ff")
+    custom_tag_status = ft.Text("", color="#a8c7fa")
+    custom_tags_list = ft.Column(spacing=8)
+
+    # === INSTANT TAGS ===
+    instant_tag_dd = ft.Dropdown(label="Тег", width=220, options=[])
+    instant_action_type = ft.Dropdown(
+        label="Тип",
+        width=160,
+        value="text",
+        options=[
+            ft.dropdown.Option("text"),
+            ft.dropdown.Option("photo"),
+            ft.dropdown.Option("voice"),
+            ft.dropdown.Option("document"),
+            ft.dropdown.Option("video_note"),
+        ],
+    )
+    instant_order = ft.TextField(label="Порядок", width=90, value="1")
+    instant_delay = ft.TextField(label="Задержка сек", width=130, value="0")
+    instant_text = ft.TextField(label="Текст", width=520, multiline=True)
+    instant_file_path = ft.TextField(label="file_path", width=520)
+
+    instant_status = ft.Text("", color="#a8c7fa")
+    instant_actions_list = ft.Column(spacing=8)
+
+    custom_tags_content = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
+    instant_tags_content = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
 
     main_content = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
     pushes_content = ft.Column(expand=True)
@@ -398,6 +437,84 @@ def create_admin_ui(on_back, db_query):
         db_query("DELETE FROM tag_colors WHERE id=?", (tag_id,))
         load_tags()
 
+    def load_custom_tags(e=None):
+        custom_tags_list.controls.clear()
+
+        rows = get_custom_tags(db_query)
+
+        instant_tag_dd.options = [
+            ft.dropdown.Option(str(tag_id), name)
+            for tag_id, name, color in rows
+        ]
+
+        for tag_id, name, color in rows:
+            custom_tags_list.controls.append(
+                ft.Container(
+                    bgcolor="#17212b",
+                    border_radius=10,
+                    padding=10,
+                    content=ft.Row([
+                        ft.Text(name, expand=True, weight="bold"),
+                        ft.Text(color or "-", width=120),
+                        ft.TextButton("Удалить", on_click=lambda e, x=tag_id: delete_custom_tag_ui(x)),
+                    ])
+                )
+            )
+
+    def add_custom_tag_ui(e):
+        add_custom_tag(db_query, custom_tag_name.value, custom_tag_color.value)
+        load_custom_tags()
+        e.page.update()
+
+    def delete_custom_tag_ui(tag_id):
+        delete_custom_tag(db_query, tag_id)
+        load_custom_tags()
+
+    def load_instant_actions(e=None):
+        instant_actions_list.controls.clear()
+
+        rows = db_query("""
+            SELECT id, action_type, text, file_path, delay_seconds
+            FROM instant_tag_actions
+            WHERE active=1
+        """, fetch=True) or []
+
+        for action_id, action_type, text, file_path, delay in rows:
+            instant_actions_list.controls.append(
+                ft.Text(f"{action_type} | {delay}s | {text or file_path}")
+            )
+
+    def add_instant_action_ui(e):
+        add_instant_action(
+            db_query,
+            int(instant_tag_dd.value),
+            int(instant_order.value or 1),
+            instant_action_type.value,
+            instant_text.value,
+            instant_file_path.value,
+            int(instant_delay.value or 0)
+        )
+
+        load_instant_actions()
+        e.page.update()
+
+    def delete_instant_action_ui(action_id):
+        delete_instant_action(db_query, action_id)
+        load_instant_actions()
+
+    def show_custom_tags(e=None):
+        load_custom_tags()
+        admin_container.content = custom_tags_content
+        if e:
+            e.page.update()
+
+    def show_instant_tags(e=None):
+        load_custom_tags()
+        load_instant_actions()
+        admin_container.content = instant_tags_content
+        if e:
+            e.page.update()
+
     def add_router_channel(e):
         channel = (router_channel.value or "").strip()
         token = (router_token.value or "").strip()
@@ -495,7 +612,11 @@ def create_admin_ui(on_back, db_query):
     main_content.controls = [
         ft.TextButton("← Назад", on_click=on_back),
 
-        ft.Text("Админ панель", size=24, weight="bold"),
+        ft.Row([
+            ft.Text("Админ панель", size=24, weight="bold", expand=True),
+            ft.FilledButton("Теги", on_click=show_custom_tags),
+            ft.FilledButton("Инстант", on_click=show_instant_tags),
+        ]),
         ft.Text("Статистика CRM", size=14, color="#707579"),
 
         ft.Divider(),
@@ -631,6 +752,32 @@ def create_admin_ui(on_back, db_query):
 
         ft.Text("Список тегов", size=16, weight="bold"),
         tag_list,
+    ]
+
+    custom_tags_content.controls = [
+        ft.TextButton("← Назад", on_click=show_main),
+        ft.Text("Кастомные теги", size=20),
+
+        custom_tag_name,
+        custom_tag_color,
+        ft.FilledButton("Добавить", on_click=add_custom_tag_ui),
+
+        custom_tags_list
+    ]
+
+    instant_tags_content.controls = [
+        ft.TextButton("← Назад", on_click=show_main),
+        ft.Text("Инстант-теги", size=20),
+
+        instant_tag_dd,
+        instant_action_type,
+        instant_text,
+        instant_file_path,
+        instant_delay,
+
+        ft.FilledButton("Добавить действие", on_click=add_instant_action_ui),
+
+        instant_actions_list
     ]
 
     admin_container.content = main_content
