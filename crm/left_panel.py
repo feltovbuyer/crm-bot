@@ -87,8 +87,9 @@ def update_left_panel(user_list, db_query, state, page, select_user):
             chips = []
             for t in tags_str.split(','):
                 t = t.strip()
-                if not t: continue
-                # цвет из tag_colors
+                if not t:
+                    continue
+
                 tag_color = tag_colors.get(t)
 
                 custom_tag_row = db_query(
@@ -98,28 +99,17 @@ def update_left_panel(user_list, db_query, state, page, select_user):
                 )
                 custom_tag_color = custom_tag_row[0][0] if custom_tag_row else None
 
-                geo_cfg = next((g for g in geos.values() if g.get("label") == t), None)
-                geo_color = geo_cfg.get("color") if geo_cfg else None
+                geo_color = next((g["color"] for g in geos.values() if g.get("label") == t), None)
 
-                bg_color = custom_tag_color or tag_color or geo_color
+                bg_color = custom_tag_color or tag_color or geo_color or "#2b5278"
 
-                chips.append(
-                    ft.Container(
-                        bgcolor=bg_color if bg_color else None,
-                        border=ft.border.all(1, bg_color or "#2b5278"),
-                        border_radius=6,
-                        padding=ft.padding.symmetric(horizontal=7, vertical=2),
-                        margin=ft.margin.only(right=3),
-                        height=22,
-                        content=ft.Text(
-                            t,
-                            size=9,
-                            color="white" if bg_color else "#707579",
-                            weight="bold" if bg_color else "normal",
-                            no_wrap=True,
-                        ),
-                    )
-                )
+                chips.append(ft.Container(
+                    content=ft.Text(t, size=10, color="white", weight="bold"),
+                    padding=ft.padding.symmetric(horizontal=5, vertical=2),
+                    bgcolor=bg_color,
+                    border_radius=4,
+                    border=ft.border.all(1, "white30") if bg_color else None
+                ))
 
             target_container.controls.append(ft.ListTile(
                 leading=ft.Container(
@@ -136,21 +126,12 @@ def update_left_panel(user_list, db_query, state, page, select_user):
                 subtitle=ft.Column([
                     ft.Text(
                         txt,
-                        size=13,
+                        size=14,
                         max_lines=1,
                         color="white" if unread_msg else "#cfd8dc",
                         weight="bold" if unread_msg else "normal"
                     ),
-                    ft.Container(
-                        content=ft.Row(
-                            chips,
-                            wrap=False,
-                            spacing=3,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER
-                        ),
-                        height=24,
-                        clip_behavior=ft.ClipBehavior.HARD_EDGE
-                    ) if chips else ft.Container()
+                    ft.Row(chips, wrap=True, spacing=3) if chips else ft.Container()
                 ], spacing=2),
                 trailing=ft.Text(tm, size=11),
                 on_click=lambda e, u=uid: page.run_task(select_user, u),
