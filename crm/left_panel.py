@@ -98,26 +98,25 @@ def update_left_panel(user_list, db_query, state, page, select_user):
                 )
                 custom_tag_color = custom_tag_row[0][0] if custom_tag_row else None
 
-                geo_color = None
                 geo_cfg = next((g for g in geos.values() if g.get("label") == t), None)
-                if geo_cfg:
-                    geo_color = geo_cfg.get("color")
+                geo_color = geo_cfg.get("color") if geo_cfg else None
 
-                bg_color = custom_tag_color or tag_color or geo_color or "#2b5278"
+                bg_color = custom_tag_color or tag_color or geo_color
 
-                bg_color = tag_color if tag_color else "#2b5278"
                 chips.append(
                     ft.Container(
-                        bgcolor=bg_color,
-                        border_radius=8,
-                        padding=ft.padding.symmetric(horizontal=8, vertical=4),
-                        margin=ft.margin.only(right=4, bottom=4),
+                        bgcolor=bg_color if bg_color else None,
+                        border=ft.border.all(1, bg_color or "#2b5278"),
+                        border_radius=6,
+                        padding=ft.padding.symmetric(horizontal=7, vertical=2),
+                        margin=ft.margin.only(right=3),
+                        height=22,
                         content=ft.Text(
                             t,
-                            size=10,
-                            color="white",
-                            weight="bold",
-                            no_wrap=False,
+                            size=9,
+                            color="white" if bg_color else "#707579",
+                            weight="bold" if bg_color else "normal",
+                            no_wrap=True,
                         ),
                     )
                 )
@@ -135,9 +134,23 @@ def update_left_panel(user_list, db_query, state, page, select_user):
                     ft.Icon(ft.Icons.BLOCK, size=16, color="red") if is_bl or "403" in tags_str else ft.Container()
                 ], spacing=8),
                 subtitle=ft.Column([
-                    ft.Text(txt, size=14, max_lines=1, color="white" if unread_msg else "#cfd8dc",
-                            weight="bold" if unread_msg else "normal"),
-                    ft.Row(chips, wrap=True, spacing=3) if chips else ft.Container()
+                    ft.Text(
+                        txt,
+                        size=13,
+                        max_lines=1,
+                        color="white" if unread_msg else "#cfd8dc",
+                        weight="bold" if unread_msg else "normal"
+                    ),
+                    ft.Container(
+                        content=ft.Row(
+                            chips,
+                            wrap=False,
+                            spacing=3,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER
+                        ),
+                        height=24,
+                        clip_behavior=ft.ClipBehavior.HARD_EDGE
+                    ) if chips else ft.Container()
                 ], spacing=2),
                 trailing=ft.Text(tm, size=11),
                 on_click=lambda e, u=uid: page.run_task(select_user, u),

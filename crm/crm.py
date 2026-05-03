@@ -520,16 +520,17 @@ async def show_crm(page: ft.Page):
 
                     ui["tags"].controls.append(
                         ft.Container(
-                            bgcolor=bg_color or "#243447",
-                            border_radius=8,
-                            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                            bgcolor=bg_color if bg_color else None,
+                            border=ft.border.all(1, bg_color or "#2b5278"),
+                            border_radius=6,
+                            padding=ft.padding.symmetric(horizontal=12, vertical=6),
                             margin=ft.margin.only(right=4, bottom=4),
                             content=ft.Text(
                                 t,
                                 size=11,
-                                color="white" if bg_color else "#cfd8dc",
+                                color="white" if bg_color else "#707579",
                                 weight="bold" if bg_color else "normal",
-                                no_wrap=False,
+                                no_wrap=True,
                             ),
                             on_click=lambda e, v=t: page.run_task(delete_tag, v),
                         )
