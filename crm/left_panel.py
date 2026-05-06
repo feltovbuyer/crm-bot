@@ -222,7 +222,7 @@ def update_left_panel(user_list, db_query, state, page, select_user):
                     height=18,
                     border_radius=9,
                     bgcolor="red",
-                    alignment=ft.alignment.center,
+                    alignment=ft.alignment.Alignment(0, 0),
 
                     content=ft.Text(
                         str(len(
