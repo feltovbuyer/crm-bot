@@ -18,7 +18,8 @@ tag_search_field = ft.TextField(
 
 
 def update_left_panel(user_list, db_query, state, page, select_user):
-    if "folder" not in state: state["folder"] = "Рега"
+    if "folder" not in state:
+        state["folder"] = "Непрочитка"
 
     try:
         with open('config.json', 'r', encoding='utf-8') as f:
@@ -54,12 +55,16 @@ def update_left_panel(user_list, db_query, state, page, select_user):
             params.append(f"%{tag_search_field.value}%")
 
         # --- ЛОГИКА ВОРОНКИ ---
-        if state["folder"] == "Рега":
-            # Ищем и "Рега" и "Регистрация", но исключаем депы
-            sql_base += """ AND (tags LIKE '%Рега%' OR tags LIKE '%Регистрация%') 
-                            AND tags NOT LIKE '%ФД%' 
-                            AND tags NOT LIKE '%РД%' 
-                            AND is_blocked=0 AND tags NOT LIKE '%403%'"""
+        if state["folder"] == "Непрочитка":
+            sql_base += """
+                AND EXISTS (
+                    SELECT 1
+                    FROM messages m
+                    WHERE m.user_id = users.user_id
+                    ORDER BY m.id DESC
+                    LIMIT 1
+                )
+            """
         elif state["folder"] == "ФД":
             sql_base += " AND tags LIKE '%ФД%' AND is_blocked=0 AND tags NOT LIKE '%403%'"
         elif state["folder"] == "РД":
@@ -71,6 +76,33 @@ def update_left_panel(user_list, db_query, state, page, select_user):
 
         sql_base += " ORDER BY last_ts DESC"
         ls = db_query(sql_base, params, fetch=True) or []
+        filtered_ls = []
+
+        for l in ls:
+            uid, name, channel, tags_str, is_bl = l
+
+            last_msg = db_query(
+                """
+                SELECT sender
+                FROM messages
+                WHERE user_id=?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (uid,),
+                fetch=True
+            )
+
+            if state["folder"] == "Непрочитка":
+                if not last_msg:
+                    continue
+
+                if last_msg[0][0] != "user":
+                    continue
+
+            filtered_ls.append(l)
+
+        ls = filtered_ls
 
         target_container.controls = []
         for l in ls:
@@ -155,8 +187,67 @@ def update_left_panel(user_list, db_query, state, page, select_user):
 
     # Создаем кнопки заново при каждом вызове для надежности стилей
     folder_tabs = ft.Row([
-        ft.TextButton("Рега", on_click=lambda _: set_f("Рега"),
-                      style=ft.ButtonStyle(color="white" if state["folder"] == "Рега" else "#707579")),
+        ft.Stack([
+            ft.TextButton(
+                "Непрочитка",
+                on_click=lambda _: set_f("Непрочитка"),
+                style=ft.ButtonStyle(
+                    color="white" if state["folder"] == "Непрочитка" else "#707579"
+                )
+            ),
+
+            ft.Container(
+                visible=len(
+                    db_query(
+                        """
+                        SELECT u.user_id
+                        FROM users u
+                        JOIN messages m ON m.user_id = u.user_id
+                        WHERE m.id IN (
+                            SELECT MAX(id)
+                            FROM messages
+                            GROUP BY user_id
+                        )
+                        AND m.sender='user'
+                        """,
+                        fetch=True
+                    ) or []
+                ) > 0,
+
+                right=0,
+                top=0,
+
+                content=ft.Container(
+                    width=18,
+                    height=18,
+                    border_radius=9,
+                    bgcolor="red",
+                    alignment=ft.alignment.center,
+
+                    content=ft.Text(
+                        str(len(
+                            db_query(
+                                """
+                                SELECT u.user_id
+                                FROM users u
+                                JOIN messages m ON m.user_id = u.user_id
+                                WHERE m.id IN (
+                                    SELECT MAX(id)
+                                    FROM messages
+                                    GROUP BY user_id
+                                )
+                                AND m.sender='user'
+                                """,
+                                fetch=True
+                            ) or []
+                        )),
+                        size=10,
+                        color="white",
+                        weight="bold"
+                    )
+                )
+            )
+        ], width=120, height=36),
         ft.TextButton("ФД", on_click=lambda _: set_f("ФД"),
                       style=ft.ButtonStyle(color="white" if state["folder"] == "ФД" else "#707579")),
         ft.TextButton("РД", on_click=lambda _: set_f("РД"),
